@@ -1,0 +1,25 @@
+call main
+
+bytes px = [0b10000000]
+bytes sp1 = [0xFF, 0xFA, 0xFB]
+words sp2 = [&main, 0xAAB, 0xBAB]
+
+proc main {
+	v0 = 0x0ABB
+	v1 = 12
+
+	loop {
+		v0 &= v1
+		v0 -= v1
+		v1 <<= 1
+
+		if v1 < 1 {
+			draw sp1, @sp1
+		} elif v1 >= 3 {
+			v0 -= v3
+		}
+
+		getkey v0
+		draw sp1, @sp1
+	}
+}
