@@ -1,16 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define peek(l) (*((l)->stack[(l)->depth].stream))
-#define next(l) (*((l)->stack[(l)->depth].stream++))
-#define loc(l)  ((l)->stack[(l)->depth].loc)
-#define skip_ws(l) while (peek(l) == ' ' || peek(l) == '\t' || peek(l) == '\n') next(l)
-
 typedef struct {
 	char *file;
-	char *line_beg;
-	unsigned line_num;
-	char *elem_beg;
+	unsigned line;
+	unsigned col;
 } Location;
 
 typedef struct {
@@ -20,6 +14,34 @@ typedef struct {
 	} stack[128];
 	int depth;
 } Scanner;
+
+Location loc(Scanner *sc) {
+	return sc->stack[sc->depth].loc;
+}
+
+char peek(Scanner *sc) {
+	return *(sc->stack[sc->depth].stream);
+}
+
+char next(Scanner *sc) {
+	if (peek(sc) == '\n') {
+		sc->stack[sc->depth].loc.line++;
+		sc->stack[sc->depth].loc.col = 0;
+	} else {
+		sc->stack[sc->depth].loc.col++;
+	}
+
+	char res = *(sc->stack[sc->depth].stream++);
+	return res;
+}
+
+void skip_ws(Scanner *sc) {
+	while (
+		peek(sc) == ' '  ||
+		peek(sc) == '\t' ||
+		peek(sc) == '\n'
+	) next(sc);
+}
 
 Scanner *sc_from_file(char *filename) {
 	FILE *f = fopen(filename, "r");
@@ -59,6 +81,8 @@ Scanner *sc_from_file(char *filename) {
 	Scanner *sc = malloc(sizeof(*sc));
 	sc->stack[0].stream = str;
 	sc->stack[0].loc.file = filename;
+	sc->stack[0].loc.line = 0;
+	sc->stack[0].loc.col = 0;
 	sc->depth = 0;
 
 	return sc;
