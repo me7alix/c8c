@@ -109,13 +109,19 @@ SPC_Result pnumf(SPC_Parser *p, SPC_Input *inp) {
 		size_t count = 0;
 
 		while (isdigit(peek(l)) || peek(l) == 'x' || peek(l) == 'b') {
-			if ((peek(l) == 'x' || peek(l) == 'b') && (count != 1 || digits[0] != '0')) {
+			if ((peek(l) == 'x' || peek(l) == 'b') && (count != 1 || digits[0] != '0'))
 				fatal(loc(l), "incorrect number");
-			}
 			digits[count++] = next(l);
 		}
 
-		unsigned long long num = strtoull(digits, NULL, 0);
+		unsigned long long num;
+		if (digits[1] == 'x') {
+			num = strtoull(digits + 2, NULL, 16);
+		} else if (digits[1] == 'b') {
+			num = strtoull(digits + 2, NULL, 2);
+		} else {
+			num = strtoull(digits, NULL, 10);
+		}
 
 		AST *n = ast_new(AST_OPR);
 		n->as.opr.kind = OPR_IMM;
@@ -167,7 +173,7 @@ SPC_Parser *preg() {
 	return p;
 }
 
-void *fold_math(int, void **args) {
+void *fold_math(int _, void **args) {
 	AST *n = ast_new(AST_MATH);
 	n->as.math.lhs = args[0];
 	n->as.math.rhs = args[2];
@@ -176,6 +182,8 @@ void *fold_math(int, void **args) {
 		case '+': n->as.math.op = MOP_ADD; break;
 		case '-': n->as.math.op = MOP_SUB; break;
 	}
+
+	return n;
 }
 
 void *fold_items(int n, void **args) {
@@ -192,7 +200,7 @@ void *fold_items(int n, void **args) {
 	return args[0];
 }
 
-void *fold_proc(int, void **args) {
+void *fold_proc(int _, void **args) {
 	AST *n = ast_new(AST_PROC);
 	n->as.proc.id = args[0];
 	n->as.proc.block = args[1];
@@ -211,10 +219,22 @@ void *map_block(void *data) {
 	return n;
 }
 
-void *fold_while(int, void **args) {
+void *map_ret(void *data) {
+	return ast_new(AST_RETURN);
+}
+
+void *fold_while(int _, void **args) {
 	AST *n = ast_new(AST_WHILE);
 	n->as.whiles.cond = args[0];
 	n->as.whiles.block = args[1];
+	return n;
+}
+
+
+void *fold_if(int _, void **args) {
+	AST *n = ast_new(AST_IF);
+	n->as.ifs.cond = args[0];
+	n->as.ifs.block = args[1];
 	return n;
 }
 
@@ -232,9 +252,11 @@ void *fold_cond_op(int n, void **args) {
 			case '<': return (void*)COP_LESS;
 		}
 	}
+
+	return NULL;
 }
 
-void *fold_cond(int, void **args) {
+void *fold_cond(int _, void **args) {
 	AST *n = ast_new(AST_COND);
 	n->as.cond.lhs = args[0];
 	n->as.cond.op = (int)args[1];
@@ -242,7 +264,7 @@ void *fold_cond(int, void **args) {
 	return n;
 }
 
-void *fold_bytes(int, void **args) {
+void *fold_bytes(int _, void **args) {
 	AST *n = ast_new(AST_BYTES);
 	n->as.bytes.id = args[0];
 
@@ -265,11 +287,13 @@ SPC_Parser *parser() {
 	SPC_Fold f_proc  = {fold_proc, free};
 	SPC_Fold f_items = {fold_items, free};
 	SPC_Fold f_while = {fold_while, free};
+	SPC_Fold f_if    = {fold_if, free};
 	SPC_Fold f_cop   = {fold_cond_op, NULL};
 	SPC_Fold f_cond  = {fold_cond, free};
 	SPC_Fold f_bytes = {fold_bytes, free};
 	SPC_Map  m_block = {map_block, free};
 	SPC_Map  m_prog  = {map_prog, free};
+	SPC_Map  m_ret   = {map_ret, free};
 
 	SPC_Parser **block = malloc(sizeof(void*));
 	SPC_Parser *lazy_block = spc_lazy(block);
@@ -290,8 +314,10 @@ SPC_Parser *parser() {
 	SPC_Parser *cond  = spc_sequence(3, f_cond, opr, cop, opr);
 	SPC_Parser *math  = spc_sequence(3, f_math, opr, mop, opr);
 
+	SPC_Parser *ret   = spc_map(pid("return"), m_ret);
 	SPC_Parser *whs   = spc_sequence(2, f_while, spc_keep_right(pid("while"), cond), lazy_block);
-	SPC_Parser *stmt  = spc_choice(2, math, whs);
+	SPC_Parser *ifs   = spc_sequence(2, f_if, spc_keep_right(pid("if"), cond), lazy_block);
+	SPC_Parser *stmt  = spc_choice(4, ret, ifs, math, whs);
 
 	           *block = spc_between(pch('{'), spc_map(spc_many(stmt, f_items), m_block), pch('}'));
 	SPC_Parser *proc  = spc_sequence(2, f_proc, spc_keep_right(pid("proc"), pid(NULL)), *block);
