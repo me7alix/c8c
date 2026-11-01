@@ -38,9 +38,20 @@ char next(Scanner *sc) {
 void skip_ws(Scanner *sc) {
 	while (
 		peek(sc) == ' '  ||
+		peek(sc) == '%'  ||
 		peek(sc) == '\t' ||
 		peek(sc) == '\n'
-	) next(sc);
+	) {
+		if (peek(sc) == '%') {
+			next(sc);
+			while (
+				peek(sc) != '%' &&
+				peek(sc) != '\0'
+			) next(sc);
+		}
+
+		next(sc);
+	}
 }
 
 Scanner *sc_from_file(char *filename) {
