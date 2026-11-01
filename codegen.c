@@ -28,6 +28,7 @@ typedef struct {
 	ProcCont proc;
 	DataCont data;
 	uint16_t addr;
+	Proc *cur_proc;
 } CodegenCtx;
 
 #define da_append(da, item)                                    \
@@ -38,23 +39,86 @@ typedef struct {
 		(da)->items[(da)->count++] = (item);                   \
 	} while (0)
 
+void emit_ld(FILE *f, CodegenCtx *ctx, AST *dst, AST *src) {
+
+}
+
+Proc *get_proc(CodegenCtx *ctx, char *id) {
+	for (size_t i = 0; i < ctx->proc.count; i++) {
+		if (strcmp(ctx->proc.items[i].id, id) == 0) {
+			return ctx->proc.items + i;
+		}
+	}
+	return NULL;
+}
+
+Data *get_data(CodegenCtx *ctx, char *id) {
+	for (size_t i = 0; i < ctx->data.count; i++) {
+		if (strcmp(ctx->data.items[i].id, id) == 0) {
+			return ctx->data.items + i;
+		}
+	}
+	return NULL;
+}
+
+void emit_word(FILE *f, CodegenCtx *ctx, uint16_t word) {
+	fputc((word >> 8) & 0xFF, f);
+	fputc(word & 0xFF, f);
+	ctx->addr += 2;
+}
+
+void emit_cond(FILE *f, CodegenCtx *ctx, AST *n) {
+	// a > b
+	//   vf = b
+	//   SUB vf, a
+	//   SE vf, 0
+	//   JP .skip
+	//   *body*
+	//   JP .exit
+	//   .skip:
+
+	// a <= b
+	//   vf = b
+	//   SUB vf, a
+	//   SE vf, 1
+	//   JP .skip
+	//   *body*
+	//   JP .exit
+	//   .skip:
+
+	// a < b
+	//   vf = b
+	//   SUBN vf, a
+	//   SE vf, 0
+	//   JP .skip
+	//   *body*
+	//   JP .exit
+	//   .skip:
+
+	// a >= b
+	//   vf = b
+	//   SUBN vf, a
+	//   SE vf, 1
+	//   JP .skip
+	//   *body*
+	//   JP .exit
+	//   .skip:
+}
+
 void emit_block(FILE *f, CodegenCtx *ctx, AST *n) {
 	for (AST *c = n->as.block; c; c = c->next) {
 		switch (c->kind) {
 		case AST_MATH: {
 			uint16_t inst = 0;
 
-			AST *lhs = c->as.math.lhs;
-			AST *rhs = c->as.math.rhs;
+			AST_Opr lhs = c->as.math.lhs->as.opr;
+			AST_Opr rhs = c->as.math.rhs->as.opr;
 
-			AST_OprKind lhs_kind = lhs->as.opr.kind;
-			AST_OprKind rhs_kind = rhs->as.opr.kind;
-
-			if (lhs_kind == OPR_VREG && rhs_kind == OPR_VREG) {
+			if (lhs.kind == OPR_VREG && rhs.kind == OPR_VREG) {
 				inst = 0x8000;
 
-				inst |= (lhs->as.opr.val & 0xF) << 8;
-				inst |= (rhs->as.opr.val & 0xF) << 4;
+				inst |= (lhs.val & 0xF) << 8;
+				inst |= (rhs.val & 0xF) << 4;
 
 				switch (n->as.math.op) {
 					case MOP_ADD: inst |= 0x4; break;
@@ -64,23 +128,21 @@ void emit_block(FILE *f, CodegenCtx *ctx, AST *n) {
 					case MOP_XOR: inst |= 0x3; break;
 				}
 			} else if (
-				lhs_kind == OPR_VREG &&
-				rhs_kind == OPR_IMM &&
+				lhs.kind == OPR_VREG &&
+				rhs.kind == OPR_IMM &&
 				c->as.math.op == MOP_ADD
 			) {
 				inst = 0x7000;
 
-				inst |= (lhs->as.opr.val & 0xF) << 8;
-				inst |= rhs->as.opr.val & 0xFF;
+				inst |= (lhs.val & 0xF) << 8;
+				inst |= rhs.val & 0xFF;
 			}
 
-			fputc((inst >> 8) & 0xFF, f);
-			fputc(inst & 0xFF, f);
-
-			ctx->addr += 2;
+			emit_word(f, ctx, inst);
 		} break;
 
 		case AST_IF:
+			emit_block(f, ctx, c->as.ifs.block);
 			break;
 
 		case AST_WHILE:
@@ -105,6 +167,9 @@ void emit_bytes(FILE *f, CodegenCtx *ctx, AST *n) {
 }
 
 void emit_proc(FILE *f, CodegenCtx *ctx, AST *n) {
+	Proc proc = {n->as.proc.id, ctx->addr};
+	da_append(&ctx->proc, proc);
+	ctx->cur_proc = &proc;
 	emit_block(f, ctx, n->as.proc.block);
 }
 
