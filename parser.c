@@ -181,6 +181,7 @@ void *fold_math(int _, void **args) {
 	switch ((char)args[1]) {
 		case '+': n->as.math.op = MOP_ADD; break;
 		case '-': n->as.math.op = MOP_SUB; break;
+		case '=': n->as.math.op = MOP_ASG; break;
 	}
 
 	return n;
@@ -221,6 +222,12 @@ void *map_block(void *data) {
 
 void *map_ret(void *data) {
 	return ast_new(AST_RETURN);
+}
+
+void *map_call(void *data) {
+	AST *n = ast_new(AST_CALL);
+	n->as.call.id = data;
+	return n;
 }
 
 void *fold_while(int _, void **args) {
@@ -293,6 +300,7 @@ SPC_Parser *parser() {
 	SPC_Fold f_bytes = {fold_bytes, free};
 	SPC_Map  m_block = {map_block, free};
 	SPC_Map  m_prog  = {map_prog, free};
+	SPC_Map  m_call  = {map_call, free};
 	SPC_Map  m_ret   = {map_ret, free};
 
 	SPC_Parser **block = malloc(sizeof(void*));
@@ -300,7 +308,7 @@ SPC_Parser *parser() {
 
 	SPC_Parser *add   = spc_keep_left(pch('+'), pch('='));
 	SPC_Parser *sub   = spc_keep_left(pch('-'), pch('='));
-	SPC_Parser *mop   = spc_choice(2, add, sub);
+	SPC_Parser *mop   = spc_choice(3, add, sub, pch('='));
 
 	SPC_Parser *gte   = spc_sequence(2, f_cop, pch('>'), pch('='));
 	SPC_Parser *lte   = spc_sequence(2, f_cop, pch('<'), pch('='));
@@ -313,11 +321,12 @@ SPC_Parser *parser() {
 	SPC_Parser *opr   = spc_choice(2, pnum(), preg());
 	SPC_Parser *cond  = spc_sequence(3, f_cond, opr, cop, opr);
 	SPC_Parser *math  = spc_sequence(3, f_math, opr, mop, opr);
+	SPC_Parser *call  = spc_map(spc_keep_right(pid("call"), pid(NULL)), m_call);
 
 	SPC_Parser *ret   = spc_map(pid("return"), m_ret);
 	SPC_Parser *whs   = spc_sequence(2, f_while, spc_keep_right(pid("while"), cond), lazy_block);
 	SPC_Parser *ifs   = spc_sequence(2, f_if, spc_keep_right(pid("if"), cond), lazy_block);
-	SPC_Parser *stmt  = spc_choice(4, ret, ifs, math, whs);
+	SPC_Parser *stmt  = spc_choice(5, ret, ifs, math, whs, call);
 
 	           *block = spc_between(pch('{'), spc_map(spc_many(stmt, f_items), m_block), pch('}'));
 	SPC_Parser *proc  = spc_sequence(2, f_proc, spc_keep_right(pid("proc"), pid(NULL)), *block);
