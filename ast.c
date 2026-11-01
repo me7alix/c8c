@@ -10,6 +10,8 @@ typedef enum {
 	AST_BYTES,
 	AST_WORDS,
 	AST_RETURN,
+	AST_CALL,
+	AST_ID,
 } AST_Kind;
 
 typedef enum {
@@ -18,6 +20,7 @@ typedef enum {
 	MOP_AND,
 	MOP_OR,
 	MOP_XOR,
+	MOP_ASG,
 } AST_MathOp;
 
 typedef enum {
@@ -34,6 +37,11 @@ typedef enum {
 	OPR_VREG,
 	OPR_IREG,
 } AST_OprKind;
+
+typedef struct {
+	AST_OprKind kind;
+	unsigned val;
+} AST_Opr;
 
 typedef struct AST AST;
 struct AST {
@@ -57,10 +65,6 @@ struct AST {
 			AST *block;
 		} proc;
 		struct {
-			AST_OprKind kind;
-			unsigned val;
-		} opr;
-		struct {
 			AST *cond;
 			AST *block;
 		} whiles;
@@ -74,8 +78,13 @@ struct AST {
 			unsigned char *data;
 			size_t count;
 		} bytes;
+		struct {
+			char *id;
+		} call;
+		AST_Opr opr;
 		AST *prog;
 		AST *block;
+		char *id;
 	} as;
 };
 
@@ -97,11 +106,13 @@ void ast_dump(FILE *f, AST *n, int intend, int depth) {
 		for (AST *c = n->as.prog; c; c = c->next)
 			ast_dump(f, c, intend, depth);
 		break;
+
 	case AST_PROC:
 		fprintf(f, "proc %s {\n", n->as.proc.id);
 		ast_dump(f, n->as.proc.block, intend, depth + 1);
 		fprintf(f, "}\n");
 		break;
+
 	case AST_MATH:
 		fintend(f, intend, depth);
 		ast_dump(f, n->as.math.lhs, intend, depth);
@@ -112,10 +123,12 @@ void ast_dump(FILE *f, AST *n, int intend, int depth) {
 			case MOP_AND: fprintf(f, "&= "); break;
 			case MOP_OR:  fprintf(f, "|= "); break;
 			case MOP_XOR: fprintf(f, "^= "); break;
+			case MOP_ASG: fprintf(f, "= "); break;
 		}
 		ast_dump(f, n->as.math.rhs, intend, depth);
 		fprintf(f, "\n");
 		break;
+
 	case AST_COND:
 		ast_dump(f, n->as.cond.lhs, intend, depth);
 		fprintf(f, " ");
@@ -129,10 +142,12 @@ void ast_dump(FILE *f, AST *n, int intend, int depth) {
 		}
 		ast_dump(f, n->as.cond.rhs, intend, depth);
 		break;
+
 	case AST_BLOCK:
 		for (AST *c = n->as.block; c; c = c->next)
 			ast_dump(f, c, intend, depth);
 		break;
+
 	case AST_IF:
 		fintend(f, intend, depth);
 		fprintf(f, "if ");
@@ -142,6 +157,7 @@ void ast_dump(FILE *f, AST *n, int intend, int depth) {
 		fintend(f, intend, depth);
 		fprintf(f, "}\n");
 		break;
+
 	case AST_WHILE:
 		fintend(f, intend, depth);
 		fprintf(f, "while ");
@@ -151,6 +167,7 @@ void ast_dump(FILE *f, AST *n, int intend, int depth) {
 		fintend(f, intend, depth);
 		fprintf(f, "}\n");
 		break;
+
 	case AST_BYTES:
 		fintend(f, intend, depth);
 		fprintf(f, "bytes %s = [", n->as.bytes.id);
@@ -160,10 +177,17 @@ void ast_dump(FILE *f, AST *n, int intend, int depth) {
 		}
 		fprintf(f, "]\n");
 		break;
+
 	case AST_RETURN:
 		fintend(f, intend, depth);
 		fprintf(f, "return\n");
 		break;
+
+	case AST_CALL:
+		fintend(f, intend, depth);
+		fprintf(f, "call %s\n", n->as.call.id);
+		break;
+
 	case AST_OPR:;
 		unsigned val = n->as.opr.val;
 		switch (n->as.opr.kind) {
