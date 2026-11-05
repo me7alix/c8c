@@ -10,6 +10,8 @@ typedef enum {
 	AST_BYTES,
 	AST_WORDS,
 	AST_RETURN,
+	AST_DRAW,
+	AST_LOOP,
 	AST_CALL,
 	AST_ID,
 } AST_Kind;
@@ -81,6 +83,9 @@ struct AST {
 		struct {
 			char *id;
 		} call;
+		struct {
+			AST *block;
+		} loop;
 		AST_Opr opr;
 		AST *prog;
 		AST *block;
@@ -103,9 +108,10 @@ void fintend(FILE *f, int intend, int depth) {
 void ast_dump(FILE *f, AST *n, int intend, int depth) {
 	switch (n->kind) {
 	case AST_PROG:
-		for (AST *c = n->as.prog; c; c = c->next)
+		for (AST *c = n->as.prog; c; c = c->next) {
 			ast_dump(f, c, intend, depth);
-		break;
+			fprintf(f, "\n");
+		} break;
 
 	case AST_PROC:
 		fprintf(f, "proc %s {\n", n->as.proc.id);
@@ -168,6 +174,17 @@ void ast_dump(FILE *f, AST *n, int intend, int depth) {
 		fprintf(f, "}\n");
 		break;
 
+	case AST_LOOP:
+		fintend(f, intend, depth);
+		if (n->as.loop.block) {
+			fprintf(f, "loop {\n");
+			ast_dump(f, n->as.loop.block, intend, depth + 1);
+			fintend(f, intend, depth);
+			fprintf(f, "}\n");
+		} else {
+			fprintf(f, "loop {}\n");
+		} break;
+
 	case AST_BYTES:
 		fintend(f, intend, depth);
 		fprintf(f, "bytes %s = [", n->as.bytes.id);
@@ -186,6 +203,10 @@ void ast_dump(FILE *f, AST *n, int intend, int depth) {
 	case AST_CALL:
 		fintend(f, intend, depth);
 		fprintf(f, "call %s\n", n->as.call.id);
+		break;
+
+	case AST_ID:
+		fprintf(f, "%s", n->as.id);
 		break;
 
 	case AST_OPR:;
