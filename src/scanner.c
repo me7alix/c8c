@@ -1,11 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-
-typedef struct {
-	char *file;
-	unsigned line;
-	unsigned col;
-} Location;
+#include "error.c"
 
 typedef struct {
 	struct {
@@ -15,7 +10,7 @@ typedef struct {
 	int depth;
 } Scanner;
 
-Location loc(Scanner *sc) {
+Location get_loc(Scanner *sc) {
 	return sc->stack[sc->depth].loc;
 }
 
