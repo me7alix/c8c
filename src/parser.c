@@ -262,6 +262,25 @@ SPC_Result fold_while(int _, void **args) {
 	return spc_ok(n, free);
 }
 
+SPC_Result map_cls(void *data) {
+	AST *n = ast_new(AST_CLS);
+	n->loc = ((AST*)data)->loc;
+	return spc_ok(n, free);
+}
+
+SPC_Result map_dt(void *data) {
+	AST *n = ast_new(AST_OPR);
+	n->loc = ((AST*)data)->loc;
+	n->as.opr.kind = OPR_DT;
+	return spc_ok(n, free);
+}
+
+SPC_Result map_st(void *data) {
+	AST *n = ast_new(AST_OPR);
+	n->loc = ((AST*)data)->loc;
+	n->as.opr.kind = OPR_ST;
+	return spc_ok(n, free);
+}
 
 SPC_Result fold_if(int _, void **args) {
 	AST *n = ast_new(AST_IF);
@@ -301,6 +320,9 @@ SPC_Result fold_cond(int _, void **args) {
 SPC_Result fold_draw(int _, void **args) {
 	AST *n = ast_new(AST_DRAW);
 	n->loc = ((AST*)args[0])->loc;
+	n->as.draw.data_id = ((AST*)args[1])->as.id;
+	n->as.draw.x = args[2];
+	n->as.draw.y = args[3];
 	return spc_ok(n, free);
 }
 
@@ -338,17 +360,20 @@ SPC_Parser *parser() {
 	SPC_Parser *gt    = spc_sequence(fold_cop, 1, pch('>'));
 	SPC_Parser *cop   = spc_choice(6, lt, gt, gte, lte, ne, eq);
 
-	SPC_Parser *opr   = spc_choice(3, pnum(), preg(), pid(NULL));
+	SPC_Parser *dt    = spc_map(map_dt, pid("dt"));
+	SPC_Parser *st    = spc_map(map_st, pid("st"));
+	SPC_Parser *opr   = spc_choice(5, dt, st, pnum(), preg(), pid(NULL));
 	SPC_Parser *cond  = spc_sequence(fold_cond, 3, opr, cop, opr);
 	SPC_Parser *math  = spc_sequence(fold_math, 3, opr, mop, opr);
-	SPC_Parser *call  = spc_sequence(fold_call, 2, pid("call"), pid(NULL));
 
-	/* SPC_Parser *draw  = spc_sequence(); */
+	SPC_Parser *cls   = spc_map(map_cls, pid("cls"));
+	SPC_Parser *call  = spc_sequence(fold_call, 2, pid("call"), pid(NULL));
+	SPC_Parser *draw  = spc_sequence(fold_draw, 4, pid("draw"), pid(NULL), opr, opr);
 	SPC_Parser *loop  = spc_sequence(fold_loop, 2, pid("loop"), lazy_block);
 	SPC_Parser *ret   = spc_map(map_ret, pid("return"));
 	SPC_Parser *whs   = spc_sequence(fold_while, 3, pid("while"), cond, lazy_block);
 	SPC_Parser *ifs   = spc_sequence(fold_if, 3, pid("if"), cond, lazy_block);
-	SPC_Parser *stmt  = spc_choice(6, loop, whs, ret, ifs, call, math);
+	SPC_Parser *stmt  = spc_choice(8, cls, draw, loop, whs, ret, ifs, call, math);
 
 	           *block = spc_between(pch('{'), spc_map(map_block, spc_many(fold_items, stmt)), pch('}'));
 	SPC_Parser *proc  = spc_sequence(fold_proc, 3, pid("proc"), pid(NULL), *block);

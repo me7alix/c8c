@@ -106,13 +106,21 @@ void emit_ld(CodegenCtx *ctx, AST *dst, AST *src) {
 		inst |= (dsto.val) << 8;
 		inst |= (srco.val & 0xFF);
 		emit_word(ctx, inst);
-	}
+	} else if (dsto.kind == OPR_IREG && srco.kind == OPR_IMM) {
+		uint16_t inst = 0xA000 | (srco.val & 0xFFF);
+		emit_word(ctx, inst);
+	} else assert(0);
 }
 
 static AST vf = {
 	.kind = AST_OPR,
 	.as.opr.kind = OPR_VREG,
 	.as.opr.val = 0xF,
+};
+
+static AST ir = {
+	.kind = AST_OPR,
+	.as.opr.kind = OPR_IREG,
 };
 
 void emit_cond(CodegenCtx *ctx, AST *n) {
@@ -272,6 +280,30 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 
 		case AST_RETURN:
 			emit_word(ctx, 0x00EE);
+			break;
+
+		case AST_DRAW: {
+			Data *dt = get_data(ctx, c->as.draw.data_id);
+			if (!dt) throw_error(c->loc, "no such data (1st operand)");
+
+			AST addr = {
+				.kind = AST_OPR,
+				.as.opr.kind = OPR_IMM,
+				.as.opr.val = dt->addr,
+			};
+
+			emit_ld(ctx, &ir, &addr);
+
+			uint16_t inst = 0xD000;
+			inst |= (c->as.draw.x->as.opr.val & 0xF) << 8;
+			inst |= (c->as.draw.y->as.opr.val & 0xF) << 4;
+			inst |= dt->len & 0xF;
+			emit_word(ctx, inst);
+		} break;
+
+		case AST_CLS:
+			emit_word(ctx, 0x00E0);
+			break;
 
 		default:
 			assert(0);
@@ -289,6 +321,7 @@ void emit_bytes(CodegenCtx *ctx, AST *n) {
 	}
 
 	if (n->as.bytes.count % 2 != 0) {
+		push_byte(ctx, 0);
 		ctx->addr++;
 	}
 }
@@ -298,6 +331,7 @@ void emit_proc(CodegenCtx *ctx, AST *n) {
 	da_append(&ctx->proc, proc);
 	ctx->cur_proc = &proc;
 	emit_block(ctx, n->as.proc.block);
+	emit_word(ctx, 0x00EE);
 }
 
 void emit_prog(FILE *f, AST *n) {
