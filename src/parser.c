@@ -174,6 +174,17 @@ SPC_Result pregf(SPC_Parser *p, SPC_Input *inp) {
 		n->as.opr.kind = OPR_IREG;
 		next(l);
 		return spc_ok(n, free);
+	} else if (peek(l) == 's' || peek(l) == 'd') {
+		Location loc = get_loc(l);
+		char fl = next(l);
+
+		if (peek(l) == 't') {
+			AST *n = ast_new(AST_OPR);
+			n->as.opr.kind = fl == 's' ? OPR_ST : OPR_DT;
+			n->loc = loc;
+			next(l);
+			return spc_ok(n, free);
+		}
 	}
 
 	return fail(get_loc(l), "not a register");
@@ -268,17 +279,11 @@ SPC_Result map_cls(void *data) {
 	return spc_ok(n, free);
 }
 
-SPC_Result map_dt(void *data) {
-	AST *n = ast_new(AST_OPR);
-	n->loc = ((AST*)data)->loc;
-	n->as.opr.kind = OPR_DT;
-	return spc_ok(n, free);
-}
-
-SPC_Result map_st(void *data) {
-	AST *n = ast_new(AST_OPR);
-	n->loc = ((AST*)data)->loc;
-	n->as.opr.kind = OPR_ST;
+SPC_Result fold_ifs(int _, void **args) {
+	AST *n = ast_new(AST_IF);
+	n->loc = ((AST*)args[0])->loc;
+	n->as.ifs.cond = args[1];
+	n->as.ifs.block = args[2];
 	return spc_ok(n, free);
 }
 
@@ -287,6 +292,39 @@ SPC_Result fold_if(int _, void **args) {
 	n->loc = ((AST*)args[0])->loc;
 	n->as.ifs.cond = args[1];
 	n->as.ifs.block = args[2];
+	return spc_ok(n, free);
+}
+
+SPC_Result fold_else(int _, void **args) {
+	AST *n = ast_new(AST_IF);
+	n->loc = ((AST*)args[0])->loc;
+	n->as.ifs.cond = NULL;
+	n->as.ifs.block = args[1];
+	return spc_ok(n, free);
+}
+
+SPC_Result fold_elif(int n, void **args) {
+	if (n == 0) {
+		return spc_ok(NULL, NULL);
+	}
+
+	AST *cur = args[0];
+	for (int i = 1; i < n; i++) {
+		cur->as.ifs.next = args[i];
+		cur = cur->as.ifs.next;
+	}
+
+	return spc_ok(args[0], free);
+}
+
+SPC_Result fold_ifc(int _, void **args) {
+	AST *n = args[0];
+	n->as.ifs.next = args[1];
+
+	if (args[1]) {
+		n->as.ifs.next->as.ifs.next = args[2];
+	}
+
 	return spc_ok(n, free);
 }
 
@@ -360,9 +398,7 @@ SPC_Parser *parser() {
 	SPC_Parser *gt    = spc_sequence(fold_cop, 1, pch('>'));
 	SPC_Parser *cop   = spc_choice(6, lt, gt, gte, lte, ne, eq);
 
-	SPC_Parser *dt    = spc_map(map_dt, pid("dt"));
-	SPC_Parser *st    = spc_map(map_st, pid("st"));
-	SPC_Parser *opr   = spc_choice(5, dt, st, pnum(), preg(), pid(NULL));
+	SPC_Parser *opr   = spc_choice(3, pnum(), preg(), pid(NULL));
 	SPC_Parser *cond  = spc_sequence(fold_cond, 3, opr, cop, opr);
 	SPC_Parser *math  = spc_sequence(fold_math, 3, opr, mop, opr);
 
@@ -372,8 +408,11 @@ SPC_Parser *parser() {
 	SPC_Parser *loop  = spc_sequence(fold_loop, 2, pid("loop"), lazy_block);
 	SPC_Parser *ret   = spc_map(map_ret, pid("return"));
 	SPC_Parser *whs   = spc_sequence(fold_while, 3, pid("while"), cond, lazy_block);
+	SPC_Parser *elses = spc_sequence(fold_else, 2, pid("else"), lazy_block);
+	SPC_Parser *elifs = spc_sequence(fold_if, 3, pid("elif"), cond, lazy_block);
 	SPC_Parser *ifs   = spc_sequence(fold_if, 3, pid("if"), cond, lazy_block);
-	SPC_Parser *stmt  = spc_choice(8, cls, draw, loop, whs, ret, ifs, call, math);
+	SPC_Parser *ifc   = spc_sequence(fold_ifc, 3, ifs, spc_optional(spc_many(fold_elif, elifs)), spc_optional(elses));
+	SPC_Parser *stmt  = spc_choice(9, ifc, cls, draw, loop, whs, ret, ifs, call, math);
 
 	           *block = spc_between(pch('{'), spc_map(map_block, spc_many(fold_items, stmt)), pch('}'));
 	SPC_Parser *proc  = spc_sequence(fold_proc, 3, pid("proc"), pid(NULL), *block);
