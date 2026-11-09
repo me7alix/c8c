@@ -39,6 +39,17 @@ typedef struct {
 	Proc *cur_proc;
 } CodegenCtx;
 
+static AST vf = {
+	.kind = AST_OPR,
+	.as.opr.kind = OPR_VREG,
+	.as.opr.val = 0xF,
+};
+
+static AST ir = {
+	.kind = AST_OPR,
+	.as.opr.kind = OPR_IREG,
+};
+
 #define da_append(da, item)                                    \
 	do {                                                       \
 		if ((da)->capacity == 0) (da)->capacity = 256;         \
@@ -91,43 +102,89 @@ void patch_jump_address(CodegenCtx *ctx, size_t place, uint16_t addr) {
 }
 
 void emit_ld(CodegenCtx *ctx, AST *dst, AST *src) {
-	AST_Opr dsto = dst->as.opr;
-	AST_Opr srco = src->as.opr;
+	AST_Opr od = dst->as.opr;
+	AST_Opr os = src->as.opr;
 
-	if (dsto.kind == OPR_VREG && srco.kind == OPR_VREG) {
+	if (od.kind == OPR_VREG && os.kind == OPR_VREG) {
 		/* 8xy0 - LD Vx, Vy */
 		uint16_t inst = 0x8000;
-		inst |= (dsto.val) << 8;
-		inst |= (srco.val) << 4;
+		inst |= (od.val) << 8;
+		inst |= (os.val) << 4;
 		emit_word(ctx, inst);
-	} else if (dsto.kind == OPR_VREG && srco.kind == OPR_IMM) {
+	} else if (od.kind == OPR_VREG && os.kind == OPR_IMM) {
 		/* 6xkk - LD Vx, byte */
 		uint16_t inst = 0x6000;
-		inst |= (dsto.val) << 8;
-		inst |= (srco.val & 0xFF);
+		inst |= (od.val) << 8;
+		inst |= (os.val & 0xFF);
 		emit_word(ctx, inst);
-	} else if (dsto.kind == OPR_IREG && srco.kind == OPR_IMM) {
-		uint16_t inst = 0xA000 | (srco.val & 0xFFF);
-		emit_word(ctx, inst);
+	} else if (od.kind == OPR_IREG && os.kind == OPR_IMM) {
+		emit_word(ctx, 0xA000 | (os.val & 0xFFF));
+	} else if (od.kind == OPR_DT && os.kind == OPR_VREG) {
+		/* Fx15 - LD DT, Vx */
+		emit_word(ctx, 0xF015 | ((os.val & 0xF) << 8));
+	} else if (od.kind == OPR_DT && os.kind == OPR_IMM) {
+		emit_ld(ctx, &vf, src);
+		emit_word(ctx, 0xFF15);
+	} else if (od.kind == OPR_VREG && os.kind == OPR_DT) {
+		/* Fx07 - LD Vx, DT */
+		emit_word(ctx, 0xF007 | ((od.val & 0xF) << 8));
 	} else assert(0);
 }
 
-static AST vf = {
-	.kind = AST_OPR,
-	.as.opr.kind = OPR_VREG,
-	.as.opr.val = 0xF,
-};
-
-static AST ir = {
-	.kind = AST_OPR,
-	.as.opr.kind = OPR_IREG,
-};
-
 void emit_cond(CodegenCtx *ctx, AST *n) {
+	AST *lhs = n->as.cond.lhs;
+	AST *rhs = n->as.cond.rhs;
+
+	if (lhs->kind != AST_OPR) {
+		throw_error(lhs->loc, "operand expected");
+	} else if (rhs->kind != AST_OPR) {
+		throw_error(rhs->loc, "operand expected");
+	}
+
+	AST_Opr opl = lhs->as.opr;
+	AST_Opr opr = rhs->as.opr;
+
 	switch (n->as.cond.op) {
-		case COP_EQ:
-		case COP_NOT_EQ:
-			break;
+		case COP_EQ: {
+			// a == b
+			//   SE a, b
+
+			if (opl.kind == OPR_VREG && opr.kind == OPR_VREG) {
+				/* 5xy0 - SE Vx, Vy */
+				uint16_t inst = 0x5000;
+				inst |= (opl.val & 0xF) << 8;
+				inst |= (opr.val & 0xF) << 4;
+				emit_word(ctx, inst);
+			} else assert(0);
+		} break;
+
+		case COP_NOT_EQ: {
+			// a != b
+			//   SNE a, b
+
+			if (opl.kind == OPR_VREG && opr.kind == OPR_VREG) {
+				/* 9xy0 - SNE Vx, Vy */
+				uint16_t inst = 0x9000;
+				inst |= (opl.val & 0xF) << 8;
+				inst |= (opr.val & 0xF) << 4;
+				emit_word(ctx, inst);
+			} else if (opl.kind == OPR_DT && opr.kind == OPR_VREG) {
+				emit_ld(ctx, &vf, lhs);
+				uint16_t inst = 0x9F00;
+				inst |= (opl.val & 0xF) << 8;
+				inst |= (opr.val & 0xF) << 4;
+				emit_word(ctx, inst);
+			} else if (opl.kind == OPR_VREG && opr.kind == OPR_IMM) {
+				/* 4xkk - SNE Vx, byte */
+				uint16_t inst = 0x4000;
+				inst |= (opl.val & 0xF) << 8;
+				inst |= opr.val & 0xFF;
+				emit_word(ctx, inst);
+			} else if (opl.kind == OPR_DT && opr.kind == OPR_IMM) {
+				emit_ld(ctx, &vf, lhs);
+				emit_word(ctx, 0x4F00 | (opr.val & 0xFF));
+			} else assert(0);
+		} break;
 
 		case COP_GREATER: {
 			// a > b
@@ -135,8 +192,7 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			//   SUB vf, a
 			//   SE vf, 0
 
-			emit_ld(ctx, &vf, n->as.cond.rhs);
-			AST *lhs = n->as.cond.lhs;
+			emit_ld(ctx, &vf, rhs);
 			if (lhs->kind != AST_OPR || lhs->as.opr.kind != OPR_VREG)
 				throw_error(lhs->loc, "V register expected");
 			emit_word(ctx, 0x8F05 | (((lhs->as.opr.val) & 0xF) << 4));
@@ -149,8 +205,7 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			//   SUBN vf, a
 			//   SE vf, 0
 
-			emit_ld(ctx, &vf, n->as.cond.rhs);
-			AST *lhs = n->as.cond.lhs;
+			emit_ld(ctx, &vf, rhs);
 			if (lhs->kind != AST_OPR || lhs->as.opr.kind != OPR_VREG)
 				throw_error(lhs->loc, "V register expected");
 			emit_word(ctx, 0x8F07 | (((lhs->as.opr.val) & 0xF) << 4));
@@ -163,8 +218,7 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			//   SUBN vf, a
 			//   SE vf, 1
 
-			emit_ld(ctx, &vf, n->as.cond.rhs);
-			AST *lhs = n->as.cond.lhs;
+			emit_ld(ctx, &vf, rhs);
 			if (lhs->kind != AST_OPR || lhs->as.opr.kind != OPR_VREG)
 				throw_error(lhs->loc, "V register expected");
 			emit_word(ctx, 0x8F07 | (((lhs->as.opr.val) & 0xF) << 4));
@@ -177,13 +231,43 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			//   SUB vf, a
 			//   SE vf, 1
 
-			emit_ld(ctx, &vf, n->as.cond.rhs);
-			AST *lhs = n->as.cond.lhs;
+			emit_ld(ctx, &vf, rhs);
 			if (lhs->kind != AST_OPR || lhs->as.opr.kind != OPR_VREG)
 				throw_error(lhs->loc, "V register expected");
 			emit_word(ctx, 0x8F05 | (((lhs->as.opr.val) & 0xF) << 4));
 			emit_word(ctx, 0x3F01);
 		} break;
+	}
+}
+
+void emit_block(CodegenCtx *ctx, AST *n);
+
+void emit_ifs(CodegenCtx *ctx, AST *n) {
+	size_t jumps[64];
+	size_t count = 0;
+	size_t next_jump;
+
+	while (n) {
+		if (n->as.ifs.cond) {
+			emit_cond(ctx, n->as.ifs.cond);
+			next_jump = emit_jump_placeholder(ctx);
+		}
+
+		emit_block(ctx, n->as.ifs.block);
+
+		if (n->as.ifs.next) {
+			jumps[count++] = emit_jump_placeholder(ctx);
+		}
+
+		if (n->as.ifs.cond) {
+			patch_jump_address(ctx, next_jump, ctx->addr);
+		}
+
+		n = n->as.ifs.next;
+	}
+
+	for (size_t i = 0; i < count; i++) {
+		patch_jump_address(ctx, jumps[i], ctx->addr);
 	}
 }
 
@@ -277,6 +361,10 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			emit_block(ctx, c->as.loop.block);
 			emit_jump(ctx, beg_addr);
 		} break;
+
+		case AST_IF:
+			emit_ifs(ctx, c);
+			break;
 
 		case AST_RETURN:
 			emit_word(ctx, 0x00EE);
