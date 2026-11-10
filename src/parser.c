@@ -303,6 +303,14 @@ SPC_Result fold_else(int _, void **args) {
 	return spc_ok(n, free);
 }
 
+SPC_Result fold_alias(int _, void **args) {
+	AST *n = ast_new(AST_ALIAS);
+	n->loc = ((AST*)args[0])->loc;
+	n->as.alias.id = ((AST*)args[1])->as.id;
+	n->as.alias.opr = args[2];
+	return spc_ok(n, free);
+}
+
 SPC_Result fold_elif(int n, void **args) {
 	if (n == 0) {
 		return spc_ok(NULL, NULL);
@@ -319,10 +327,12 @@ SPC_Result fold_elif(int n, void **args) {
 
 SPC_Result fold_ifc(int _, void **args) {
 	AST *n = args[0];
-	n->as.ifs.next = args[1];
 
 	if (args[1]) {
+		n->as.ifs.next = args[1];
 		n->as.ifs.next->as.ifs.next = args[2];
+	} else {
+		n->as.ifs.next = args[2];
 	}
 
 	return spc_ok(n, free);
@@ -415,11 +425,12 @@ SPC_Parser *parser() {
 	SPC_Parser *stmt  = spc_choice(9, ifc, cls, draw, loop, whs, ret, ifs, call, math);
 
 	           *block = spc_between(pch('{'), spc_map(map_block, spc_many(fold_items, stmt)), pch('}'));
+	SPC_Parser *alias = spc_sequence(fold_alias, 3, pid("alias"), pch('='), opr);
 	SPC_Parser *proc  = spc_sequence(fold_proc, 3, pid("proc"), pid(NULL), *block);
 	SPC_Parser *array = spc_between(pch('['), spc_sep_by(fold_items, pnum(), pch(',')), pch(']'));
 	SPC_Parser *bytes = spc_sequence(fold_bytes, 2, spc_between(pid("bytes"), pid(NULL), pch('=')), array);
 	/* SPC_Parser *words = spc_sequence(2, ..., spc_between(pid("words"), pid(NULL), pch('=')), array); */
-	SPC_Parser *hld   = spc_choice(2, proc, bytes);
+	SPC_Parser *hld   = spc_choice(3, alias, proc, bytes);
 	return              spc_map(map_prog, spc_many(fold_items, hld));
 
 }

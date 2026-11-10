@@ -15,6 +15,7 @@ typedef enum {
 	AST_CALL,
 	AST_CLS,
 	AST_ID,
+	AST_ALIAS,
 } AST_Kind;
 
 typedef enum {
@@ -93,6 +94,10 @@ struct AST {
 			char *data_id;
 			AST *x, *y;
 		} draw;
+		struct {
+			char *id;
+			AST *opr;
+		} alias;
 		AST_Opr opr;
 		AST *prog;
 		AST *block;
@@ -161,15 +166,35 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 			ast_dump(f, c, it, dp);
 		break;
 
-	case AST_IF:
+	case AST_IF: {
 		fintend(f, it, dp);
-		fprintf(f, "if ");
-		ast_dump(f, n->as.ifs.cond, it, dp + 1);
-		fprintf(f, " {\n");
-		ast_dump(f, n->as.ifs.block, it, dp + 1);
-		fintend(f, it, dp);
-		fprintf(f, "}\n");
-		break;
+
+		for (AST *c = n; c; c = c->as.ifs.next) {
+			if (c == n) {
+				fprintf(f, "if ");
+			} else if (!c->as.ifs.cond) {
+				fprintf(f, "else ");
+			} else {
+				fprintf(f, "elif ");
+			}
+
+			if (c->as.ifs.cond) {
+				ast_dump(f, c->as.ifs.cond, it, dp + 1);
+				fprintf(f, " {\n");
+			} else {
+				fprintf(f, "{\n");
+			}
+
+			ast_dump(f, c->as.ifs.block, it, dp + 1);
+			fintend(f, it, dp);
+
+			if (c->as.ifs.next) {
+				fprintf(f, "} ");
+			} else {
+				fprintf(f, "}\n");
+			}
+		}
+	} break;
 
 	case AST_WHILE:
 		fintend(f, it, dp);
@@ -236,6 +261,8 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 			case OPR_IMM:  fprintf(f, "%u", val);  break;
 			case OPR_VREG: fprintf(f, "v%u", val); break;
 			case OPR_IREG: fprintf(f, "i");        break;
+			case OPR_DT:   fprintf(f, "dt");       break;
+			case OPR_ST:   fprintf(f, "st");       break;
 		}
 	}
 }
