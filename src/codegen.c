@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <assert.h>
-#include "parser.c"
+#include "transform.c"
 
 typedef struct {
 	char *id;
@@ -128,7 +128,9 @@ void emit_ld(CodegenCtx *ctx, AST *dst, AST *src) {
 	} else if (od.kind == OPR_VREG && os.kind == OPR_DT) {
 		/* Fx07 - LD Vx, DT */
 		emit_word(ctx, 0xF007 | ((od.val & 0xF) << 8));
-	} else assert(0);
+	} else {
+		throw_error(dst->loc, "operation is not supported");
+	}
 }
 
 void emit_cond(CodegenCtx *ctx, AST *n) {
@@ -146,22 +148,32 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 
 	switch (n->as.cond.op) {
 		case COP_EQ: {
-			// a == b
-			//   SE a, b
-
 			if (opl.kind == OPR_VREG && opr.kind == OPR_VREG) {
 				/* 5xy0 - SE Vx, Vy */
 				uint16_t inst = 0x5000;
 				inst |= (opl.val & 0xF) << 8;
 				inst |= (opr.val & 0xF) << 4;
 				emit_word(ctx, inst);
-			} else assert(0);
+			} else if (opl.kind == OPR_DT && opr.kind == OPR_VREG) {
+				emit_ld(ctx, &vf, lhs);
+				uint16_t inst = 0x5F00;
+				inst |= (opr.val & 0xF) << 4;
+				emit_word(ctx, inst);
+			} else if (opl.kind == OPR_VREG && opr.kind == OPR_IMM) {
+				/* 3xkk - SE Vx, byte */
+				uint16_t inst = 0x3000;
+				inst |= (opl.val & 0xF) << 8;
+				inst |= opr.val & 0xFF;
+				emit_word(ctx, inst);
+			} else if (opl.kind == OPR_DT && opr.kind == OPR_IMM) {
+				emit_ld(ctx, &vf, lhs);
+				emit_word(ctx, 0x3F00 | (opr.val & 0xFF));
+			} else {
+				throw_error(n->loc, "operation is not supported");
+			}
 		} break;
 
 		case COP_NOT_EQ: {
-			// a != b
-			//   SNE a, b
-
 			if (opl.kind == OPR_VREG && opr.kind == OPR_VREG) {
 				/* 9xy0 - SNE Vx, Vy */
 				uint16_t inst = 0x9000;
@@ -171,7 +183,6 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			} else if (opl.kind == OPR_DT && opr.kind == OPR_VREG) {
 				emit_ld(ctx, &vf, lhs);
 				uint16_t inst = 0x9F00;
-				inst |= (opl.val & 0xF) << 8;
 				inst |= (opr.val & 0xF) << 4;
 				emit_word(ctx, inst);
 			} else if (opl.kind == OPR_VREG && opr.kind == OPR_IMM) {
@@ -183,7 +194,9 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			} else if (opl.kind == OPR_DT && opr.kind == OPR_IMM) {
 				emit_ld(ctx, &vf, lhs);
 				emit_word(ctx, 0x4F00 | (opr.val & 0xFF));
-			} else assert(0);
+			} else {
+				throw_error(n->loc, "operation is not supported");
+			}
 		} break;
 
 		case COP_GREATER: {
@@ -243,7 +256,8 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 void emit_block(CodegenCtx *ctx, AST *n);
 
 void emit_ifs(CodegenCtx *ctx, AST *n) {
-	size_t jumps[64];
+	const size_t max_size = 512;
+	size_t jumps[max_size];
 	size_t count = 0;
 	size_t next_jump;
 
@@ -257,6 +271,7 @@ void emit_ifs(CodegenCtx *ctx, AST *n) {
 
 		if (n->as.ifs.next) {
 			jumps[count++] = emit_jump_placeholder(ctx);
+			assert(count <= max_size);
 		}
 
 		if (n->as.ifs.cond) {
@@ -308,7 +323,7 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 					case MOP_AND: inst |= 0x2; break;
 					case MOP_OR:  inst |= 0x1; break;
 					case MOP_XOR: inst |= 0x3; break;
-					default: assert(0);
+					default: throw_error(n->loc, "operation is not supported");
 				}
 			} else if (
 				lhs.kind == OPR_VREG &&
@@ -352,8 +367,7 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			size_t skip_jump = emit_jump_placeholder(ctx);
 			emit_block(ctx, c->as.whiles.block);
 			emit_jump(ctx, beg_addr);
-			uint16_t skip_addr = ctx->addr;
-			patch_jump_address(ctx, skip_jump, skip_addr);
+			patch_jump_address(ctx, skip_jump, ctx->addr);
 		} break;
 
 		case AST_LOOP: {
