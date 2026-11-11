@@ -96,6 +96,9 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "wrong input file path");
 			return 1;
 		}
+
+		TransformCtx tctx = {0};
+		transform_ast(&tctx, res.data);
 		emit_prog(f, res.data);
 	}
 

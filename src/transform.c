@@ -12,16 +12,46 @@ typedef struct {
 } Aliases;
 
 typedef struct {
-	Aliases *items;
-	size_t count;
-	size_t capacity;
-} AliasesStack;
-
-typedef struct {
-	AliasesStack stack;
+	struct {
+		Aliases *items;
+		size_t count;
+		size_t capacity;
+	} stack;
 } TransformCtx;
 
-/*
+#define da_append(da, item)                                    \
+	do {                                                       \
+		if ((da)->capacity == 0) (da)->capacity = 256;         \
+		if ((da)->count >= (da)->capacity - 1 || !(da)->items) \
+			(da)->items = realloc((da)->items, sizeof(*(da)->items) * ((da)->capacity *= 2)); \
+		(da)->items[(da)->count++] = (item);                   \
+	} while (0)
+
+void push_stack(TransformCtx *ctx) {
+	da_append(&ctx->stack, ((Aliases){0}));
+}
+
+void pop_stack(TransformCtx *ctx) {
+	ctx->stack.count--;
+}
+
+Alias *get_alias(TransformCtx *ctx, char *id) {
+	for (size_t i = 0; i < ctx->stack.count; i++) {
+		for (size_t j = 0; j < ctx->stack.items[i].count; j++) {
+			if (strcmp(ctx->stack.items[i].items[j].id, id) == 0) {
+				return &ctx->stack.items[i].items[j];
+			}
+		}
+	}
+	return NULL;
+}
+
+void append_alias(TransformCtx *ctx, AST *n) {
+	size_t last = ctx->stack.count - 1;
+	Alias alias = {n->as.alias.id, n->as.alias.opr};
+	da_append(&ctx->stack.items[last], alias);
+}
+
 void transform_ast(TransformCtx *ctx, AST *n) {
 	switch (n->kind) {
 	case AST_PROC:
@@ -29,124 +59,62 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 		break;
 
 	case AST_PROG:
-		for (AST *c = n->as.prog; c; c = c->next) {
+		push_stack(ctx);
+		for (AST *c = n->as.prog; c; c = c->next)
 			transform_ast(ctx, c);
-		} break;
+		pop_stack(ctx);
+		break;
 
 	case AST_MATH:
-		fintend(f, it, dp);
-		ast_dump(f, n->as.math.lhs, it, dp);
-		fprintf(f, " ");
-		switch (n->as.math.op) {
-			case MOP_ADD: fprintf(f, "+= "); break;
-			case MOP_SUB: fprintf(f, "-= "); break;
-			case MOP_AND: fprintf(f, "&= "); break;
-			case MOP_OR:  fprintf(f, "|= "); break;
-			case MOP_XOR: fprintf(f, "^= "); break;
-			case MOP_ASG: fprintf(f, "= "); break;
-		}
-		ast_dump(f, n->as.math.rhs, it, dp);
-		fprintf(f, "\n");
+		transform_ast(ctx, n->as.math.lhs);
+		transform_ast(ctx, n->as.math.rhs);
 		break;
 
 	case AST_COND:
-		ast_dump(f, n->as.cond.lhs, it, dp);
-		fprintf(f, " ");
-		switch (n->as.cond.op) {
-			case COP_EQ:         fprintf(f, "== "); break;
-			case COP_NOT_EQ:     fprintf(f, "!= "); break;
-			case COP_GREATER:    fprintf(f, "> ");  break;
-			case COP_LESS:       fprintf(f, "< ");  break;
-			case COP_GREATER_EQ: fprintf(f, ">= "); break;
-			case COP_LESS_EQ:    fprintf(f, "<= "); break;
-		}
-		ast_dump(f, n->as.cond.rhs, it, dp);
+		transform_ast(ctx, n->as.cond.lhs);
+		transform_ast(ctx, n->as.cond.rhs);
 		break;
 
 	case AST_BLOCK: {
-
-
-		for (AST *c = n->as.block; c; c = c->next) {
-			ast_dump(f, c, it, dp);
-		}
+		push_stack(ctx);
+		for (AST *c = n->as.block; c; c = c->next)
+			transform_ast(ctx, c);
+		pop_stack(ctx);
 	} break;
 
 	case AST_IF:
-		fintend(f, it, dp);
-		fprintf(f, "if ");
-		ast_dump(f, n->as.ifs.cond, it, dp + 1);
-		fprintf(f, " {\n");
-		ast_dump(f, n->as.ifs.block, it, dp + 1);
-		fintend(f, it, dp);
-		fprintf(f, "}\n");
+		transform_ast(ctx, n->as.ifs.cond);
+		transform_ast(ctx, n->as.ifs.block);
 		break;
 
 	case AST_WHILE:
-		fintend(f, it, dp);
-		fprintf(f, "while ");
-		ast_dump(f, n->as.whiles.cond, it, dp + 1);
-		fprintf(f, " {\n");
-		ast_dump(f, n->as.whiles.block, it, dp + 1);
-		fintend(f, it, dp);
-		fprintf(f, "}\n");
+		transform_ast(ctx, n->as.whiles.cond);
+		transform_ast(ctx, n->as.whiles.block);
 		break;
 
 	case AST_LOOP:
-		fintend(f, it, dp);
-		if (n->as.loop.block->as.block) {
-			fprintf(f, "loop {\n");
-			ast_dump(f, n->as.loop.block, it, dp + 1);
-			fintend(f, it, dp);
-			fprintf(f, "}\n");
-		} else {
-			fprintf(f, "loop {}\n");
-		} break;
-
-	case AST_BYTES:
-		fintend(f, it, dp);
-		fprintf(f, "bytes %s = [", n->as.bytes.id);
-		for (size_t i = 0; i < n->as.bytes.count; i++) {
-			fprintf(f, "%u", n->as.bytes.data[i]);
-			if (i < n->as.bytes.count - 1) fprintf(f, ", ");
-		}
-		fprintf(f, "]\n");
-		break;
-
-	case AST_RETURN:
-		fintend(f, it, dp);
-		fprintf(f, "return\n");
+		transform_ast(ctx, n->as.loop.block);
 		break;
 
 	case AST_CALL:
-		fintend(f, it, dp);
-		fprintf(f, "call %s\n", n->as.call.id);
+		transform_ast(ctx, n->as.call.id);
 		break;
 
-	case AST_ID:
-		fprintf(f, "%s", n->as.id);
-		break;
+	case AST_ID: {
+		Alias *al = get_alias(ctx, n->as.id);
+		if (al) *n = *(al->opr);
+	} break;
+
+	case AST_ALIAS: {
+		append_alias(ctx, n);
+	} break;
 
 	case AST_DRAW:
-		fintend(f, it, dp);
-		fprintf(f, "draw %s ", n->as.draw.data_id);
-		ast_dump(f, n->as.draw.x, it, dp+1);
-		fprintf(f, " ");
-		ast_dump(f, n->as.draw.y, it, dp+1);
-		fprintf(f, "\n");
+		transform_ast(ctx, n->as.draw.data_id);
+		transform_ast(ctx, n->as.draw.x);
+		transform_ast(ctx, n->as.draw.y);
 		break;
 
-	case AST_CLS:
-		fintend(f, it, dp);
-		fprintf(f, "cls\n");
-		break;
-
-	case AST_OPR:;
-		unsigned val = n->as.opr.val;
-		switch (n->as.opr.kind) {
-			case OPR_IMM:  fprintf(f, "%u", val);  break;
-			case OPR_VREG: fprintf(f, "v%u", val); break;
-			case OPR_IREG: fprintf(f, "i");        break;
-		}
+	default:;
 	}
 }
-*/

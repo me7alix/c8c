@@ -85,13 +85,13 @@ struct AST {
 			size_t count;
 		} bytes;
 		struct {
-			char *id;
+			AST *id;
 		} call;
 		struct {
 			AST *block;
 		} loop;
 		struct {
-			char *data_id;
+			AST *data_id;
 			AST *x, *y;
 		} draw;
 		struct {
@@ -234,7 +234,7 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 
 	case AST_CALL:
 		fintend(f, it, dp);
-		fprintf(f, "call %s\n", n->as.call.id);
+		fprintf(f, "call %s\n", n->as.call.id->as.id);
 		break;
 
 	case AST_ID:
@@ -253,6 +253,13 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 	case AST_CLS:
 		fintend(f, it, dp);
 		fprintf(f, "cls\n");
+		break;
+
+	case AST_ALIAS:
+		fintend(f, it, dp);
+		fprintf(f, "alias %s = ", n->as.alias.id);
+		ast_dump(f, n->as.alias.opr, it, dp);
+		fprintf(f, "\n");
 		break;
 
 	case AST_OPR:;

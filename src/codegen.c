@@ -50,14 +50,6 @@ static AST ir = {
 	.as.opr.kind = OPR_IREG,
 };
 
-#define da_append(da, item)                                    \
-	do {                                                       \
-		if ((da)->capacity == 0) (da)->capacity = 256;         \
-		if ((da)->count >= (da)->capacity - 1 || !(da)->items) \
-			(da)->items = realloc((da)->items, sizeof(*(da)->items) * ((da)->capacity *= 2)); \
-		(da)->items[(da)->count++] = (item);                   \
-	} while (0)
-
 void push_byte(CodegenCtx *ctx, uint8_t byte) {
 	da_append(&ctx->bytes, byte);
 }
@@ -355,7 +347,7 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 
 		case AST_CALL: {
 			uint16_t inst = 0x2000;
-			Proc *p = get_proc(ctx, c->as.call.id);
+			Proc *p = get_proc(ctx, c->as.call.id->as.id);
 			if (!p) throw_error(c->loc, "no such procedure");
 			inst |= p->addr & 0xFFF;
 			emit_word(ctx, inst);
@@ -385,7 +377,7 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			break;
 
 		case AST_DRAW: {
-			Data *dt = get_data(ctx, c->as.draw.data_id);
+			Data *dt = get_data(ctx, c->as.draw.data_id->as.id);
 			if (!dt) throw_error(c->loc, "no such data (1st operand)");
 
 			AST addr = {
@@ -405,6 +397,9 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 
 		case AST_CLS:
 			emit_word(ctx, 0x00E0);
+			break;
+
+		case AST_ALIAS:
 			break;
 
 		default:
@@ -444,6 +439,7 @@ void emit_prog(FILE *f, AST *n) {
 		switch (c->kind) {
 			case AST_PROC:  emit_proc(&ctx, c);  break;
 			case AST_BYTES: emit_bytes(&ctx, c); break;
+			case AST_ALIAS:                      break;
 		}
 	}
 
