@@ -26,18 +26,24 @@ proc main {
 	v1 = 8
 	call mult
 
-	v7 = v0
-	v8 = 13
+	% Aliases aren't visible outside of the scope %
+	alias x = v7
+	alias y = v8
 
-	if v7 == 56 {
-		v7 = 1
+	x = v0
+	y = 13
+
+	% Tests multiplication %
+	if x == 56 {
+		x = 1
 	}
 
 	loop {
-		v7 += 1
+		x += 1
 
 		cls
-		draw smile v7 v8
+		draw smile x y
+		i = smile
 
 		dt = 3
 		while dt != 0 {}
