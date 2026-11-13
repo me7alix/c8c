@@ -9,6 +9,10 @@ bytes smile = [
 	0b01111110
 ]
 
+% That's how you can zero-initialize an array. %
+alias size = 100
+bytes arr = arrayOf(size)
+
 % Multiplies v0 by v1 using repeated addition.
   The result is stored in v0.
   v1 is consumed during the operation. %
@@ -31,19 +35,23 @@ proc main {
 	alias y = v8
 
 	x = v0
-	y = 13
+	% Testing storing to memory %
+	arr[3] = 13
 
 	% Tests multiplication %
 	if x == 56 {
-		x = 1
+		x = 0
 	}
+
+	% Testing loading from memory %
+	v0 = arr[3]
+	y = v0
 
 	loop {
 		x += 1
 
 		cls
-		draw smile x y
-		i = smile
+		draw smile, x, y
 
 		dt = 3
 		while dt != 0 {}
