@@ -58,6 +58,10 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 		transform_ast(ctx, n->as.proc.block);
 		break;
 
+	case AST_BYTES:
+		transform_ast(ctx, n->as.bytes.count);
+		break;
+
 	case AST_PROG:
 		push_stack(ctx);
 		for (AST *c = n->as.prog; c; c = c->next)
@@ -113,6 +117,12 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 		transform_ast(ctx, n->as.draw.data_id);
 		transform_ast(ctx, n->as.draw.x);
 		transform_ast(ctx, n->as.draw.y);
+		break;
+
+	case AST_DRAWI:
+		transform_ast(ctx, n->as.drawi.x);
+		transform_ast(ctx, n->as.drawi.y);
+		transform_ast(ctx, n->as.drawi.n);
 		break;
 
 	default:;
