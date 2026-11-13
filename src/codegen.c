@@ -93,6 +93,35 @@ void patch_jump_address(CodegenCtx *ctx, size_t place, uint16_t addr) {
 	ctx->bytes.items[place + 1] = inst & 0xFF;
 }
 
+void emit_ld(CodegenCtx *ctx, AST *dst, AST *src);
+
+void emit_arr(CodegenCtx *ctx, AST_Opr o, Location loc) {
+	Data *dt = get_data(ctx, o.ptr->as.id);
+	if (!dt) throw_error(loc, "no such data");
+
+	AST addr = {
+		.kind = AST_OPR,
+		.as.opr.kind = OPR_IMM,
+		.as.opr.val = dt->addr,
+	};
+
+	emit_ld(ctx, &ir, &addr);
+
+	AST_Opr oi = o.idx->as.opr;
+	switch (oi.kind) {
+	case OPR_VREG:
+		/* Fx1E - ADD I, Vx */
+		emit_word(ctx, 0xF01E | ((oi.val & 0xF) << 8));
+		break;
+	case OPR_IMM:
+		emit_word(ctx, 0x6F00 | (oi.val & 0xFF));
+		emit_word(ctx, 0xFF1E);
+		break;
+	default:
+		throw_error(loc, "operation is not supported");
+	}
+}
+
 void emit_ld(CodegenCtx *ctx, AST *dst, AST *src) {
 	AST_Opr od = dst->as.opr;
 	AST_Opr os = src->as.opr;
@@ -120,6 +149,24 @@ void emit_ld(CodegenCtx *ctx, AST *dst, AST *src) {
 	} else if (od.kind == OPR_VREG && os.kind == OPR_DT) {
 		/* Fx07 - LD Vx, DT */
 		emit_word(ctx, 0xF007 | ((od.val & 0xF) << 8));
+	} else if (od.kind == OPR_VREG && os.kind == OPR_DT) {
+		emit_word(ctx, 0xF007 | ((od.val & 0xF) << 8));
+	} else if (od.kind == OPR_MEM && os.kind == OPR_VREG) {
+		/* Fx55 - LD [I], Vx */
+		emit_word(ctx, 0xF055 | ((os.val & 0xF) << 8));
+	} else if (od.kind == OPR_VREG && os.kind == OPR_MEM) {
+		/* Fx65 - LD Vx, [I] */
+		emit_word(ctx, 0xF065 | ((od.val & 0xF) << 8));
+	} else if (od.kind == OPR_ARR && os.kind == OPR_VREG) {
+		emit_arr(ctx, od, dst->loc);
+		emit_word(ctx, 0xF055 | ((os.val & 0xF) << 8));
+	} else if (od.kind == OPR_VREG && os.kind == OPR_ARR) {
+		emit_arr(ctx, os, dst->loc);
+		emit_word(ctx, 0xF065 | ((od.val & 0xF) << 8));
+	} else if (od.kind == OPR_ARR && os.kind == OPR_IMM) {
+		emit_arr(ctx, od, dst->loc);
+		emit_word(ctx, 0x6000 | (os.val & 0xFF));
+		emit_word(ctx, 0xF055);
 	} else {
 		throw_error(dst->loc, "operation is not supported");
 	}
@@ -376,6 +423,15 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			emit_word(ctx, 0x00EE);
 			break;
 
+		case AST_DRAWI: {
+			uint16_t inst = 0xD000;
+			inst |= (c->as.drawi.x->as.opr.val & 0xF) << 8;
+			inst |= (c->as.drawi.y->as.opr.val & 0xF) << 4;
+			inst |= c->as.drawi.n->as.opr.val & 0xF;
+			printf("%04x\n", inst);
+			emit_word(ctx, inst);
+		} break;
+
 		case AST_DRAW: {
 			Data *dt = get_data(ctx, c->as.draw.data_id->as.id);
 			if (!dt) throw_error(c->loc, "no such data (1st operand)");
@@ -408,22 +464,45 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 	}
 }
 
+void throw_id_err(Location loc, char *id) {
+	char msg[1024];
+	sprintf(msg, "identifier `%s` is already declared", id);
+	throw_error(loc, msg);
+}
+
 void emit_bytes(CodegenCtx *ctx, AST *n) {
-	Data data = {n->as.bytes.id, ctx->addr, n->as.bytes.count};
+	if (get_data(ctx, n->as.bytes.id))
+		throw_id_err(n->loc, n->as.bytes.id);
+
+	if (n->as.bytes.count->kind != AST_OPR)
+		throw_error(n->as.bytes.count->loc, "not a number");
+
+	if (n->as.bytes.count->as.opr.kind != OPR_IMM)
+		throw_error(n->as.bytes.count->loc, "not a number");
+
+	size_t count = n->as.bytes.count->as.opr.val;
+	Data data = {n->as.bytes.id, ctx->addr, count};
 	da_append(&ctx->data, data);
 
-	for (size_t i = 0; i < n->as.bytes.count; i++) {
-		push_byte(ctx, n->as.bytes.data[i]);
+	for (size_t i = 0; i < count; i++) {
+		if (n->as.bytes.data) {
+			push_byte(ctx, n->as.bytes.data[i]);
+		} else {
+			push_byte(ctx, 0);
+		}
 		ctx->addr++;
 	}
 
-	if (n->as.bytes.count % 2 != 0) {
+	if (count % 2 != 0) {
 		push_byte(ctx, 0);
 		ctx->addr++;
 	}
 }
 
 void emit_proc(CodegenCtx *ctx, AST *n) {
+	if (get_proc(ctx, n->as.proc.id))
+		throw_id_err(n->loc, n->as.proc.id);
+
 	Proc proc = {n->as.proc.id, ctx->addr};
 	da_append(&ctx->proc, proc);
 	ctx->cur_proc = &proc;
