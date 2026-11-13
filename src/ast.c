@@ -11,11 +11,13 @@ typedef enum {
 	AST_WORDS,
 	AST_RETURN,
 	AST_DRAW,
+	AST_DRAWI,
 	AST_LOOP,
 	AST_CALL,
 	AST_CLS,
 	AST_ID,
 	AST_ALIAS,
+	AST_ARROF,
 } AST_Kind;
 
 typedef enum {
@@ -42,14 +44,18 @@ typedef enum {
 	OPR_IREG,
 	OPR_DT,
 	OPR_ST,
+	OPR_MEM,
+	OPR_ARR,
 } AST_OprKind;
+
+typedef struct AST AST;
 
 typedef struct {
 	AST_OprKind kind;
 	unsigned val;
+	AST *ptr, *idx;
 } AST_Opr;
 
-typedef struct AST AST;
 struct AST {
 	AST_Kind kind;
 	Location loc;
@@ -82,7 +88,7 @@ struct AST {
 		struct {
 			char *id;
 			unsigned char *data;
-			size_t count;
+			AST *count;
 		} bytes;
 		struct {
 			AST *id;
@@ -95,9 +101,17 @@ struct AST {
 			AST *x, *y;
 		} draw;
 		struct {
+			AST *x;
+			AST *y;
+			AST *n;
+		} drawi;
+		struct {
 			char *id;
 			AST *opr;
 		} alias;
+		struct {
+			AST *size;
+		} arrof;
 		AST_Opr opr;
 		AST *prog;
 		AST *block;
@@ -219,12 +233,21 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 
 	case AST_BYTES:
 		fintend(f, it, dp);
-		fprintf(f, "bytes %s = [", n->as.bytes.id);
-		for (size_t i = 0; i < n->as.bytes.count; i++) {
-			fprintf(f, "%u", n->as.bytes.data[i]);
-			if (i < n->as.bytes.count - 1) fprintf(f, ", ");
+		if (!n->as.bytes.data) {
+			fprintf(f, "bytes %s = ", n->as.bytes.id);
+			fprintf(f, "arrayOf(");
+			ast_dump(f, n->as.bytes.count, it, dp+1);
+			fprintf(f, ")\n");
+		} else {
+			assert(n->as.bytes.count->kind == AST_OPR);
+			assert(n->as.bytes.count->as.opr.kind == OPR_IMM);
+			fprintf(f, "bytes %s = [", n->as.bytes.id);
+			for (size_t i = 0; i < n->as.bytes.count->as.opr.val; i++) {
+				fprintf(f, "%u", n->as.bytes.data[i]);
+				if (i < n->as.bytes.count->as.opr.val - 1) fprintf(f, ", ");
+			}
+			fprintf(f, "]\n");
 		}
-		fprintf(f, "]\n");
 		break;
 
 	case AST_RETURN:
@@ -243,10 +266,21 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 
 	case AST_DRAW:
 		fintend(f, it, dp);
-		fprintf(f, "draw %s ", n->as.draw.data_id);
+		fprintf(f, "draw %s, ", n->as.draw.data_id->as.id);
 		ast_dump(f, n->as.draw.x, it, dp+1);
-		fprintf(f, " ");
+		fprintf(f, ", ");
 		ast_dump(f, n->as.draw.y, it, dp+1);
+		fprintf(f, "\n");
+		break;
+
+	case AST_DRAWI:
+		fintend(f, it, dp);
+		fprintf(f, "drawi ");
+		ast_dump(f, n->as.drawi.x, it, dp+1);
+		fprintf(f, ", ");
+		ast_dump(f, n->as.drawi.y, it, dp+1);
+		fprintf(f, ", ");
+		ast_dump(f, n->as.drawi.n, it, dp+1);
 		fprintf(f, "\n");
 		break;
 
