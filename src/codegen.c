@@ -455,6 +455,11 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			emit_word(ctx, 0x00E0);
 			break;
 
+		case AST_BLOCK:
+			emit_block(ctx, c);
+			break;
+
+		case AST_MACRO:
 		case AST_ALIAS:
 			break;
 

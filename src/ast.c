@@ -1,3 +1,8 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+
 typedef enum {
 	AST_PROG,
 	AST_PROC,
@@ -18,6 +23,8 @@ typedef enum {
 	AST_ID,
 	AST_ALIAS,
 	AST_ARROF,
+	AST_MACRO,
+	AST_MCALL,
 } AST_Kind;
 
 typedef enum {
@@ -112,6 +119,15 @@ struct AST {
 		struct {
 			AST *size;
 		} arrof;
+		struct {
+			char *id;
+			AST *args;
+			AST *block;
+		} macro;
+		struct {
+			AST *id;
+			AST *args;
+		} mcall;
 		AST_Opr opr;
 		AST *prog;
 		AST *block;
@@ -123,6 +139,133 @@ AST *ast_new(int kind) {
 	AST *n = calloc(1, sizeof(*n));
 	n->kind = kind;
 	return n;
+}
+
+char *my_strdup(char *src) {
+	size_t len = strlen(src) + 1;
+	char *n = malloc(len);
+	memcpy(n, src, len);
+	return n;
+}
+
+AST *ast_copy(AST *n) {
+	if (!n) return NULL;
+
+	AST *copy = ast_new(n->kind);
+	copy->loc = n->loc;
+	copy->next = ast_copy(n->next);
+
+	switch (n->kind) {
+	case AST_PROG:
+		copy->as.prog = ast_copy(n->as.prog);
+		break;
+
+	case AST_PROC:
+		copy->as.proc.id = n->as.proc.id ? my_strdup(n->as.proc.id) : NULL;
+		copy->as.proc.block = ast_copy(n->as.proc.block);
+		break;
+
+	case AST_BLOCK:
+		copy->as.block = ast_copy(n->as.block);
+		break;
+
+	case AST_MATH:
+		copy->as.math.op = n->as.math.op;
+		copy->as.math.lhs = ast_copy(n->as.math.lhs);
+		copy->as.math.rhs = ast_copy(n->as.math.rhs);
+		break;
+
+	case AST_COND:
+		copy->as.cond.op = n->as.cond.op;
+		copy->as.cond.lhs = ast_copy(n->as.cond.lhs);
+		copy->as.cond.rhs = ast_copy(n->as.cond.rhs);
+		break;
+
+	case AST_OPR:
+		copy->as.opr.kind = n->as.opr.kind;
+		copy->as.opr.val = n->as.opr.val;
+		copy->as.opr.ptr = ast_copy(n->as.opr.ptr);
+		copy->as.opr.idx = ast_copy(n->as.opr.idx);
+		break;
+
+	case AST_IF:
+		copy->as.ifs.cond = ast_copy(n->as.ifs.cond);
+		copy->as.ifs.block = ast_copy(n->as.ifs.block);
+		copy->as.ifs.next = ast_copy(n->as.ifs.next); // Preserves elif/else chain
+		break;
+
+	case AST_WHILE:
+		copy->as.whiles.cond = ast_copy(n->as.whiles.cond);
+		copy->as.whiles.block = ast_copy(n->as.whiles.block);
+		break;
+
+	case AST_BYTES:
+	case AST_WORDS:
+		copy->as.bytes.id = n->as.bytes.id ? my_strdup(n->as.bytes.id) : NULL;
+		copy->as.bytes.count = ast_copy(n->as.bytes.count);
+		if (n->as.bytes.data && n->as.bytes.count) {
+			assert(n->as.bytes.count->kind == AST_OPR);
+			assert(n->as.bytes.count->as.opr.kind == OPR_IMM);
+			size_t len = n->as.bytes.count->as.opr.val;
+			copy->as.bytes.data = malloc(len);
+			if (copy->as.bytes.data) {
+				memcpy(copy->as.bytes.data, n->as.bytes.data, len);
+			}
+		} else {
+			copy->as.bytes.data = NULL;
+		}
+		break;
+
+	case AST_LOOP:
+		copy->as.loop.block = ast_copy(n->as.loop.block);
+		break;
+
+	case AST_CALL:
+		copy->as.call.id = ast_copy(n->as.call.id);
+		break;
+
+	case AST_DRAW:
+		copy->as.draw.data_id = ast_copy(n->as.draw.data_id);
+		copy->as.draw.x = ast_copy(n->as.draw.x);
+		copy->as.draw.y = ast_copy(n->as.draw.y);
+		break;
+
+	case AST_DRAWI:
+		copy->as.drawi.x = ast_copy(n->as.drawi.x);
+		copy->as.drawi.y = ast_copy(n->as.drawi.y);
+		copy->as.drawi.n = ast_copy(n->as.drawi.n);
+		break;
+
+	case AST_ID:
+		copy->as.id = n->as.id ? my_strdup(n->as.id) : NULL;
+		break;
+
+	case AST_ALIAS:
+		copy->as.alias.id = n->as.alias.id ? my_strdup(n->as.alias.id) : NULL;
+		copy->as.alias.opr = ast_copy(n->as.alias.opr);
+		break;
+
+	case AST_ARROF:
+		copy->as.arrof.size = ast_copy(n->as.arrof.size);
+		break;
+
+	case AST_MACRO:
+		copy->as.macro.id = n->as.macro.id ? my_strdup(n->as.macro.id) : NULL;
+		copy->as.macro.args = ast_copy(n->as.macro.args);
+		copy->as.macro.block = ast_copy(n->as.macro.block);
+		break;
+
+	case AST_MCALL:
+		copy->as.mcall.id = ast_copy(n->as.mcall.id);
+		copy->as.mcall.args = ast_copy(n->as.mcall.args);
+		break;
+
+	case AST_RETURN:
+	case AST_CLS:
+		break;
+	}
+
+	return copy;
 }
 
 void fintend(FILE *f, int it, int dp) {
@@ -209,6 +352,30 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 			}
 		}
 	} break;
+
+	case AST_MCALL:
+		fintend(f, it, dp);
+		fprintf(f, "%s", n->as.mcall.id->as.id);
+		fprintf(f, "(");
+		for (AST *c = n->as.mcall.args; c; c = c->next) {
+			ast_dump(f, c, it, dp+1);
+			if (c->next) fprintf(f, ", ");
+		}
+		fprintf(f, ")\n");
+		break;
+
+	case AST_MACRO:
+		fintend(f, it, dp);
+		fprintf(f, "macro %s", n->as.macro.id);
+		fprintf(f, "(");
+		for (AST *c = n->as.macro.args; c; c = c->next) {
+			ast_dump(f, c, it, dp+1);
+			if (c->next) fprintf(f, ", ");
+		}
+		fprintf(f, ") {\n");
+		ast_dump(f, n->as.macro.block, it, dp+1);
+		fprintf(f, "}\n");
+		break;
 
 	case AST_WHILE:
 		fintend(f, it, dp);
@@ -304,6 +471,13 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 			case OPR_IREG: fprintf(f, "i");        break;
 			case OPR_DT:   fprintf(f, "dt");       break;
 			case OPR_ST:   fprintf(f, "st");       break;
+			case OPR_MEM:  fprintf(f, "[i]");      break;
+			case OPR_ARR: {
+				ast_dump(f, n->as.opr.ptr, it, dp+1);
+				fprintf(f, "[");
+				ast_dump(f, n->as.opr.idx, it, dp+1);
+				fprintf(f, "]");
+			} break;
 		}
 	}
 }
