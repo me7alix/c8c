@@ -13,6 +13,11 @@ bytes smile = [
 alias size = 100
 bytes arr = arrayOf(size)
 
+% Macros are defined like this. %
+macro add(a, b) {
+	a += b
+}
+
 % Multiplies v0 by v1 using repeated addition.
   The result is stored in v0.
   v1 is consumed during the operation. %
@@ -30,28 +35,28 @@ proc main {
 	v1 = 8
 	call mult
 
-	% Aliases aren't visible outside of the scope %
+	% Aliases are local to their enclosing scope. %
 	alias x = v7
 	alias y = v8
 
 	x = v0
-	% Testing storing to memory %
+	% Store a value in memory. %
 	arr[3] = 13
 
-	% Tests multiplication %
+	% Verify the multiplication result. %
 	if x == 56 {
 		x = 0
 	}
 
-	% Testing loading from memory %
+	% Load a value from memory. %
 	v0 = arr[3]
 	y = v0
 
 	loop {
-		x += 1
-
 		cls
 		draw smile, x, y
+
+		add(x, 1)
 
 		dt = 3
 		while dt != 0 {}
