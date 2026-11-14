@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "wrong output file path");
 			return 1;
 		}
+
 		ast_dump(f, res.data, 4, 0);
 	} else {
 		FILE *f = fopen(output, "wb");
@@ -97,8 +98,8 @@ int main(int argc, char *argv[]) {
 			return 1;
 		}
 
-		TransformCtx tctx = {0};
-		transform_ast(&tctx, res.data);
+		TransformCtx ctx = {0};
+		transform_ast(&ctx, res.data);
 		emit_prog(f, res.data);
 	}
 
