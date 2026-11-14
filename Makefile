@@ -9,5 +9,5 @@ CFLAGS += \
 	-Wno-pointer-to-int-cast \
 	-Wno-int-to-pointer-cast
 
-c8c: src/main.c src/scanner.c src/ast.c src/parser.c src/codegen.c
+c8c: src/main.c src/scanner.c src/ast.c src/parser.c src/codegen.c src/transform.c
 	$(CC) $(CFLAGS) src/main.c -o c8c
