@@ -9,56 +9,68 @@ bytes smile = [
 	0b01111110
 ]
 
-% That's how you can zero-initialize an array. %
-alias size = 100
-bytes arr = arrayOf(size)
+bytes bullet = [
+	0b11000000,
+	0b11000000
+]
+
+alias blt_max = 10
+bytes blt_x = arrayOf(blt_max)
+bytes blt_y = arrayOf(blt_max)
 
 % Macros are defined like this. %
-macro add(a, b) {
-	a += b
+macro wait(t) {
+	dt = t
+	while dt != 0 {}
 }
 
-% Multiplies v0 by v1 using repeated addition.
-  The result is stored in v0.
-  v1 is consumed during the operation. %
-proc mult {
-	v2 = v0
-	while v1 > 1 {
-		v0 += v2
-		v1 -= 1
-	}
+macro movement(x, y) {
+	if kd == 0x8 { y += 1 }
+	if kd == 0x5 { y -= 1 }
+	if kd == 0x9 { x += 1 }
+	if kd == 0x7 { x -= 1 }
 }
 
 % Program execution starts here. %
 proc main {
-	v0 = 7
-	v1 = 8
-	call mult
-
 	% Aliases are local to their enclosing scope. %
 	alias x = v7
 	alias y = v8
+	alias blt_cnt = v9
 
-	x = v0
-	% Store a value in memory. %
-	arr[3] = 13
+	blt_x[0] = 17
+	blt_y[0] = 10
 
-	% Verify the multiplication result. %
-	if x == 56 {
-		x = 0
-	}
+	blt_x[1] = 27
+	blt_y[1] = 30
 
-	% Load a value from memory. %
-	v0 = arr[3]
-	y = v0
+	blt_x[2] = 40
+	blt_y[2] = 3
+
+	x = 0
+	y = 13
+	blt_cnt = 3
 
 	loop {
+		movement(x, y)
+
 		cls
+
+		ve = 0
+		while ve < blt_cnt {
+			v1 = blt_y[ve]
+			v2 = blt_x[ve]
+			draw bullet, v1, v2
+			ve += 1
+		}
+
 		draw smile, x, y
 
-		add(x, 1)
+		if vf != 0 {
+			x = 0
+			y = 13
+		}
 
-		dt = 3
-		while dt != 0 {}
+		wait(1)
 	}
 }
