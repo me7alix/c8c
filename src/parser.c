@@ -178,13 +178,23 @@ SPC_Result pregf(SPC_Parser *p, SPC_Input *inp) {
 		n->as.opr.kind = OPR_IREG;
 		next(l);
 		return spc_ok(n, free);
-	} else if (peek(l) == 's' || peek(l) == 'd') {
+	} else if (
+		peek(l) == 's' ||
+		peek(l) == 'd' ||
+		peek(l) == 'k'
+	) {
 		Location loc = get_loc(l);
 		char fl = next(l);
+		char fc = peek(l);
+		int kind = -1;
 
-		if (peek(l) == 't') {
+		if      (fl == 's' && fc == 't') kind = OPR_ST;
+		else if (fl == 'd' && fc == 't') kind = OPR_DT;
+		else if (fl == 'k' && fc == 'd') kind = OPR_KD;
+
+		if (kind != -1) {
 			AST *n = ast_new(AST_OPR);
-			n->as.opr.kind = fl == 's' ? OPR_ST : OPR_DT;
+			n->as.opr.kind = kind;
 			n->loc = loc;
 			next(l);
 			return spc_ok(n, free);

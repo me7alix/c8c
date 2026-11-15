@@ -53,6 +53,7 @@ typedef enum {
 	OPR_ST,
 	OPR_MEM,
 	OPR_ARR,
+	OPR_KD,
 } AST_OprKind;
 
 typedef struct AST AST;

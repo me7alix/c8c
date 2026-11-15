@@ -159,10 +159,12 @@ void emit_ld(CodegenCtx *ctx, AST *dst, AST *src) {
 		emit_word(ctx, 0xF065 | ((od.val & 0xF) << 8));
 	} else if (od.kind == OPR_ARR && os.kind == OPR_VREG) {
 		emit_arr(ctx, od, dst->loc);
-		emit_word(ctx, 0xF055 | ((os.val & 0xF) << 8));
+		if (os.val != 0) emit_word(ctx, 0x8000 | ((os.val & 0xF) << 4));
+		emit_word(ctx, 0xF055);
 	} else if (od.kind == OPR_VREG && os.kind == OPR_ARR) {
 		emit_arr(ctx, os, dst->loc);
-		emit_word(ctx, 0xF065 | ((od.val & 0xF) << 8));
+		if (od.val != 0) emit_word(ctx, 0x8000 | ((od.val & 0xF) << 8));
+		emit_word(ctx, 0xF065);
 	} else if (od.kind == OPR_ARR && os.kind == OPR_IMM) {
 		emit_arr(ctx, od, dst->loc);
 		emit_word(ctx, 0x6000 | (os.val & 0xFF));
@@ -207,6 +209,12 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			} else if (opl.kind == OPR_DT && opr.kind == OPR_IMM) {
 				emit_ld(ctx, &vf, lhs);
 				emit_word(ctx, 0x3F00 | (opr.val & 0xFF));
+			} else if (opl.kind == OPR_KD && opr.kind == OPR_IMM) {
+				/* Ex9E - SKP Vx */
+				emit_ld(ctx, &vf, rhs);
+				emit_word(ctx, 0xEF9E);
+			} else if (opl.kind == OPR_KD && opr.kind == OPR_VREG) {
+				emit_word(ctx, 0xE09E | ((opr.val & 0xF) << 8));
 			} else {
 				throw_error(n->loc, "operation is not supported");
 			}
@@ -233,6 +241,12 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			} else if (opl.kind == OPR_DT && opr.kind == OPR_IMM) {
 				emit_ld(ctx, &vf, lhs);
 				emit_word(ctx, 0x4F00 | (opr.val & 0xFF));
+			} else if (opl.kind == OPR_KD && opr.kind == OPR_IMM) {
+				/* ExA1 - SKNP Vx */
+				emit_ld(ctx, &vf, rhs);
+				emit_word(ctx, 0xEFA1);
+			} else if (opl.kind == OPR_KD && opr.kind == OPR_VREG) {
+				emit_word(ctx, 0xE0A1 | ((opr.val & 0xF) << 8));
 			} else {
 				throw_error(n->loc, "operation is not supported");
 			}
@@ -261,7 +275,7 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			if (lhs->kind != AST_OPR || lhs->as.opr.kind != OPR_VREG)
 				throw_error(lhs->loc, "V register expected");
 			emit_word(ctx, 0x8F07 | (((lhs->as.opr.val) & 0xF) << 4));
-			emit_word(ctx, 0x3F01);
+			emit_word(ctx, 0x3F00);
 		} break;
 
 		case COP_GREATER_EQ: {
@@ -274,7 +288,7 @@ void emit_cond(CodegenCtx *ctx, AST *n) {
 			if (lhs->kind != AST_OPR || lhs->as.opr.kind != OPR_VREG)
 				throw_error(lhs->loc, "V register expected");
 			emit_word(ctx, 0x8F07 | (((lhs->as.opr.val) & 0xF) << 4));
-			emit_word(ctx, 0x3F00);
+			emit_word(ctx, 0x3F01);
 		} break;
 
 		case COP_LESS_EQ: {
@@ -428,7 +442,6 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			inst |= (c->as.drawi.x->as.opr.val & 0xF) << 8;
 			inst |= (c->as.drawi.y->as.opr.val & 0xF) << 4;
 			inst |= c->as.drawi.n->as.opr.val & 0xF;
-			printf("%04x\n", inst);
 			emit_word(ctx, inst);
 		} break;
 
