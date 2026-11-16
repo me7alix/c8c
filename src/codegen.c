@@ -163,8 +163,8 @@ void emit_ld(CodegenCtx *ctx, AST *dst, AST *src) {
 		emit_word(ctx, 0xF055);
 	} else if (od.kind == OPR_VREG && os.kind == OPR_ARR) {
 		emit_arr(ctx, os, dst->loc);
-		if (od.val != 0) emit_word(ctx, 0x8000 | ((od.val & 0xF) << 8));
 		emit_word(ctx, 0xF065);
+		if (od.val != 0) emit_word(ctx, 0x8000 | ((od.val & 0xF) << 8));
 	} else if (od.kind == OPR_ARR && os.kind == OPR_IMM) {
 		emit_arr(ctx, od, dst->loc);
 		emit_word(ctx, 0x6000 | (os.val & 0xFF));
@@ -472,6 +472,29 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			emit_block(ctx, c);
 			break;
 
+		case AST_RAND: {
+			AST *reg = c->as.rand.reg;
+			AST *and = c->as.rand.and;
+
+			if (reg->kind != AST_OPR) {
+				throw_error(c->as.math.lhs->loc, "not an operand");
+			} else if (and->kind != AST_OPR) {
+				throw_error(c->as.math.rhs->loc, "not an operand");
+			}
+
+			if (reg->as.opr.kind != OPR_VREG) {
+				throw_error(c->as.math.lhs->loc, "not a V register");
+			} else if (and->as.opr.kind != OPR_IMM) {
+				throw_error(c->as.math.rhs->loc, "not an immediate value");
+			}
+
+			/* Cxkk - RND Vx, byte */
+			uint16_t inst = 0xC000;
+			inst |= (reg->as.opr.val & 0xF) << 8;
+			inst |= and->as.opr.val & 0xFF;
+			emit_word(ctx, inst);
+		} break;
+
 		case AST_MACRO:
 		case AST_ALIAS:
 			break;
@@ -528,7 +551,13 @@ void emit_proc(CodegenCtx *ctx, AST *n) {
 	emit_word(ctx, 0x00EE);
 }
 
-void emit_prog(FILE *f, AST *n) {
+typedef struct {
+	bool failed;
+	const char *message;
+	size_t bytes_count;
+} EmitInfo;
+
+EmitInfo emit_prog(FILE *f, AST *n) {
 	CodegenCtx ctx = {.addr = 0x200};
 	emit_word(&ctx, 0);
 
@@ -540,13 +569,10 @@ void emit_prog(FILE *f, AST *n) {
 		}
 	}
 
-	Proc *main_proc = get_proc(&ctx, "main");
-	if (!main_proc) {
-		fprintf(stderr, "no main procedure\n");
-		exit(1);
-	}
+	Proc *mproc = get_proc(&ctx, "main");
+	if (!mproc) return (EmitInfo){true, "no main procedure"};
 
-	uint16_t call_main = 0x2000 | (main_proc->addr & 0xFFF);
+	uint16_t call_main = 0x2000 | (mproc->addr & 0xFFF);
 	ctx.bytes.items[0] = (call_main >> 8) & 0xFF;
 	ctx.bytes.items[1] = call_main & 0xFF;
 
@@ -554,4 +580,10 @@ void emit_prog(FILE *f, AST *n) {
 		ctx.bytes.items, 1,
 		ctx.bytes.count, f
 	);
+
+	return (EmitInfo){
+		false,
+		NULL,
+		ctx.bytes.count
+	};
 }
