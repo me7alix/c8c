@@ -25,6 +25,7 @@ void print_usage() {
 		"Usage: [options] file\n"
 		"Options:\n"
 		"  -fmt Format input file\n"
+		"  -inf Show additional info\n"
 		"  -o   Output file path\n"
 		"  -h   Show this message\n"
 	);
@@ -34,6 +35,7 @@ int main(int argc, char *argv[]) {
 	char *input = NULL;
 	char *output = NULL;
 	bool fmt = false;
+	bool inf = false;
 
 	if (argc == 1) {
 		print_usage();
@@ -46,6 +48,9 @@ int main(int argc, char *argv[]) {
 	while (cl_peek(&p)) {
 		if (cl_peek_eq(&p, "-fmt")) {
 			fmt = true;
+			cl_next(&p);
+		} else if (cl_peek_eq(&p, "-inf")) {
+			inf = true;
 			cl_next(&p);
 		} else if (cl_peek_eq(&p, "-o")) {
 			cl_next(&p);
@@ -100,7 +105,19 @@ int main(int argc, char *argv[]) {
 
 		TransformCtx ctx = {0};
 		transform_ast(&ctx, res.data);
-		emit_prog(f, res.data);
+
+		EmitInfo ei = emit_prog(f, res.data);
+		if (ei.failed) {
+			fprintf(stderr, "%s\n", ei.message);
+			return 1;
+		}
+
+		if (inf) {
+			const size_t used = ei.bytes_count;
+			const size_t total = 0xFFF - 0x200;
+			double pc = 100.0 * (double)used / (double)total;
+			printf("%zu bytes written (%.1f%% of %zu)\n", used, total, pc);
+		}
 	}
 
 	return 0;
