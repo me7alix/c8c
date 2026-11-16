@@ -14,9 +14,15 @@ bytes bullet = [
 	0b11000000
 ]
 
-alias blt_max = 10
+alias blt_max = 8
 bytes blt_x = arrayOf(blt_max)
 bytes blt_y = arrayOf(blt_max)
+bytes blt_dx = arrayOf(blt_max)
+bytes blt_dy = arrayOf(blt_max)
+alias blt_cnt = vd
+
+alias x = v7
+alias y = v8
 
 % Macros are defined like this. %
 macro wait(t) {
@@ -31,35 +37,74 @@ macro movement(x, y) {
 	if kd == 0x7 { x -= 1 }
 }
 
-% Program execution starts here. %
-proc main {
+proc blt_new {
 	% Aliases are local to their enclosing scope. %
-	alias x = v7
-	alias y = v8
-	alias blt_cnt = v9
+	alias bc = blt_cnt
 
-	blt_x[0] = 17
-	blt_y[0] = 10
+	rand v0, 0b11111
+	blt_x[blt_cnt] = v0
 
-	blt_x[1] = 27
-	blt_y[1] = 30
+	rand v0, 0b1111
+	blt_y[blt_cnt] = v0
 
-	blt_x[2] = 40
-	blt_y[2] = 3
+	rand v0, 1
+	if v0 == 0 { blt_dx[bc] = 0 }
+	else { blt_dx[bc] = 2 }
 
+	rand v0, 1
+	if v0 == 0 { blt_dy[bc] = 0 }
+	else { blt_dy[bc] = 2 }
+
+	bc += 1
+}
+
+proc start_new_game {
 	x = 0
 	y = 13
-	blt_cnt = 3
+	blt_cnt = 0
+	call blt_new
+	call blt_new
+	call blt_new
+}
+
+% Program execution starts here. %
+proc main {
+	call start_new_game
 
 	loop {
 		movement(x, y)
+
+		ve = 0
+		while ve < blt_cnt {
+			v1 = blt_dx[ve]
+			v2 = blt_dy[ve]
+			v3 = blt_x[ve]
+			v4 = blt_y[ve]
+
+			if   v4 == 0  { v2 = 2 }
+			elif v4 >= 30 { v2 = 0 }
+			if   v3 == 0  { v1 = 2 }
+			elif v3 >= 62 { v1 = 0 }
+
+			if   v1 == 0 { v3 -= 1 }
+			elif v1 == 2 { v3 += 1 }
+			if   v2 == 0 { v4 -= 1 }
+			elif v2 == 2 { v4 += 1 }
+
+			blt_dx[ve] = v1
+			blt_dy[ve] = v2
+			blt_x[ve] = v3
+			blt_y[ve] = v4
+
+			ve += 1
+		}
 
 		cls
 
 		ve = 0
 		while ve < blt_cnt {
-			v1 = blt_y[ve]
-			v2 = blt_x[ve]
+			v1 = blt_x[ve]
+			v2 = blt_y[ve]
 			draw bullet, v1, v2
 			ve += 1
 		}
@@ -67,8 +112,7 @@ proc main {
 		draw smile, x, y
 
 		if vf != 0 {
-			x = 0
-			y = 13
+			call start_new_game
 		}
 
 		wait(1)
