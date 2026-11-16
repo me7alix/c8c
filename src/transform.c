@@ -135,14 +135,23 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 	} break;
 
 	case AST_IF:
-		transform_ast(ctx, n->as.ifs.cond);
+		if (n->as.ifs.cond)
+			transform_ast(ctx, n->as.ifs.cond);
 		transform_ast(ctx, n->as.ifs.block);
+		if (n->as.ifs.next)
+			transform_ast(ctx, n->as.ifs.next);
 		break;
 
 	case AST_WHILE:
 		transform_ast(ctx, n->as.whiles.cond);
 		transform_ast(ctx, n->as.whiles.block);
 		break;
+
+	case AST_OPR:
+		if (n->as.opr.kind == OPR_ARR) {
+			transform_ast(ctx, n->as.opr.ptr);
+			transform_ast(ctx, n->as.opr.idx);
+		} break;
 
 	case AST_LOOP:
 		transform_ast(ctx, n->as.loop.block);
@@ -198,11 +207,16 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 			}
 		}
 
-		Alias *al = get_alias(ctx, n->as.id);
-		if (al) {
-			AST *next = n->next;
-			*n = *(al->opr);
-			n->next = next;
+		while (true) {
+			if (n->kind != AST_ID) break;
+			Alias *al = get_alias(ctx, n->as.id);
+			if (al) {
+				AST *next = n->next;
+				*n = *(al->opr);
+				n->next = next;
+			} else {
+				break;
+			}
 		}
 	} break;
 
