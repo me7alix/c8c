@@ -190,7 +190,11 @@ SPC_Result spc_parse_sequence(SPC_Parser *self, SPC_Input *input) {
 
 	input->unmark(input->self);
 
-	return ctx->fold(ctx->count, items);
+	if (ctx->fold) {
+		return ctx->fold(ctx->count, items);
+	}
+
+	return spc_ok(NULL, NULL);
 }
 
 SPC_Parser *spc_sequence(SPC_FoldFn fold, int n, ...) {

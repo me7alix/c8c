@@ -26,6 +26,8 @@ typedef enum {
 	AST_MACRO,
 	AST_MCALL,
 	AST_RAND,
+	AST_WITH,
+	AST_MAP,
 } AST_Kind;
 
 typedef enum {
@@ -134,6 +136,15 @@ struct AST {
 			AST *reg;
 			AST *and;
 		} rand;
+		struct {
+			AST *maps;
+			AST *block;
+		} with;
+		struct {
+			AST *reg;
+			AST *arr;
+			AST *as;
+		} map;
 		AST_Opr opr;
 		AST *prog;
 		AST *block;

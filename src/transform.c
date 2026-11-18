@@ -67,8 +67,8 @@ void pop_stack(TransformCtx *ctx) {
 }
 
 Alias *get_alias(TransformCtx *ctx, char *id) {
-	for (size_t i = 0; i < ctx->aliases.count; i++) {
-		for (size_t j = 0; j < ctx->aliases.items[i].count; j++) {
+	for (int i = ctx->aliases.count - 1; i >= 0; i--) {
+		for (int j = ctx->aliases.items[i].count - 1; j >= 0; j--) {
 			if (strcmp(ctx->aliases.items[i].items[j].id, id) == 0) {
 				return &ctx->aliases.items[i].items[j];
 			}
@@ -88,9 +88,9 @@ Macro *get_macro(TransformCtx *ctx, char *id) {
 	return NULL;
 }
 
-void append_alias(TransformCtx *ctx, AST *n) {
+void append_alias(TransformCtx *ctx, char *id, AST *opr) {
 	size_t last = ctx->aliases.count - 1;
-	Alias alias = {n->as.alias.id, n->as.alias.opr};
+	Alias alias = {id, opr};
 	da_append(&ctx->aliases.items[last], alias);
 }
 
@@ -220,8 +220,19 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 		}
 	} break;
 
+	case AST_WITH: {
+		push_stack(ctx);
+		for (AST *c = n->as.with.maps; c; c = c->next)
+			transform_ast(ctx, c->as.map.arr);
+		for (AST *c = n->as.with.maps; c; c = c->next)
+			if (c->as.map.as->as.id)
+				append_alias(ctx, c->as.map.as->as.id, c->as.map.reg);
+		transform_ast(ctx, n->as.with.block);
+		pop_stack(ctx);
+	} break;
+
 	case AST_ALIAS:
-		append_alias(ctx, n);
+		append_alias(ctx, n->as.alias.id, n->as.alias.opr);
 		break;
 
 	case AST_DRAW:
