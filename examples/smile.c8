@@ -41,10 +41,10 @@ proc blt_new {
 	% Aliases are local to their enclosing scope. %
 	alias bc = blt_cnt
 
-	rand v0, 0b11111
+	rand v0, 63
 	blt_x[blt_cnt] = v0
 
-	rand v0, 0b1111
+	rand v0, 15
 	blt_y[blt_cnt] = v0
 
 	rand v0, 1
@@ -60,7 +60,7 @@ proc blt_new {
 
 proc start_new_game {
 	x = 0
-	y = 13
+	y = 24
 	blt_cnt = 0
 	call blt_new
 	call blt_new
@@ -71,30 +71,33 @@ proc start_new_game {
 proc main {
 	call start_new_game
 
+	alias cnt = va
+	alias sec = vc
+
+	cnt = 0
+	sec = 0
+
 	loop {
 		movement(x, y)
 
 		ve = 0
 		while ve < blt_cnt {
-			v1 = blt_dx[ve]
-			v2 = blt_dy[ve]
-			v3 = blt_x[ve]
-			v4 = blt_y[ve]
+			with {
+				v1 <-> blt_x [ve] as x
+				v2 <-> blt_y [ve] as y
+				v3 <-> blt_dx[ve] as dx
+				v4 <-> blt_dy[ve] as dy
+			} {
+				if   y == 0  { dy = 2 }
+				elif y >= 30 { dy = 0 }
+				if   x == 0  { dx = 2 }
+				elif x >= 62 { dx = 0 }
 
-			if   v4 == 0  { v2 = 2 }
-			elif v4 >= 30 { v2 = 0 }
-			if   v3 == 0  { v1 = 2 }
-			elif v3 >= 62 { v1 = 0 }
-
-			if   v1 == 0 { v3 -= 1 }
-			elif v1 == 2 { v3 += 1 }
-			if   v2 == 0 { v4 -= 1 }
-			elif v2 == 2 { v4 += 1 }
-
-			blt_dx[ve] = v1
-			blt_dy[ve] = v2
-			blt_x[ve] = v3
-			blt_y[ve] = v4
+				if   dx == 0 { x -= 1 }
+				elif dx == 2 { x += 1 }
+				if   dy == 0 { y -= 1 }
+				elif dy == 2 { y += 1 }
+			}
 
 			ve += 1
 		}
@@ -115,6 +118,16 @@ proc main {
 			call start_new_game
 		}
 
-		wait(1)
+		if cnt >= 30 {
+			sec += 1
+			cnt = 0
+		}
+
+		if sec >= 7 {
+			call blt_new
+			sec = 0
+		}
+
+		cnt += 1
 	}
 }
