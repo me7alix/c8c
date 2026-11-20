@@ -78,8 +78,8 @@ Alias *get_alias(TransformCtx *ctx, char *id) {
 }
 
 Macro *get_macro(TransformCtx *ctx, char *id) {
-	for (size_t i = 0; i < ctx->macros.count; i++) {
-		for (size_t j = 0; j < ctx->macros.items[i].count; j++) {
+	for (int i = ctx->macros.count - 1; i >= 0; i--) {
+		for (int j = ctx->macros.items[i].count - 1; j >= 0; j--) {
 			if (strcmp(ctx->macros.items[i].items[j].id, id) == 0) {
 				return &ctx->macros.items[i].items[j];
 			}
@@ -149,8 +149,8 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 
 	case AST_OPR:
 		if (n->as.opr.kind == OPR_ARR) {
-			transform_ast(ctx, n->as.opr.ptr);
-			transform_ast(ctx, n->as.opr.idx);
+			transform_ast(ctx, n->as.opr.as.arr.ptr);
+			transform_ast(ctx, n->as.opr.as.arr.idx);
 		} break;
 
 	case AST_LOOP:
@@ -239,6 +239,10 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 		transform_ast(ctx, n->as.draw.data_id);
 		transform_ast(ctx, n->as.draw.x);
 		transform_ast(ctx, n->as.draw.y);
+		break;
+
+	case AST_BCD:
+		transform_ast(ctx, n->as.bcd.reg);
 		break;
 
 	case AST_DRAWI:

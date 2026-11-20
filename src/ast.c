@@ -28,6 +28,7 @@ typedef enum {
 	AST_RAND,
 	AST_WITH,
 	AST_MAP,
+	AST_BCD,
 } AST_Kind;
 
 typedef enum {
@@ -57,6 +58,7 @@ typedef enum {
 	OPR_MEM,
 	OPR_ARR,
 	OPR_KD,
+	OPR_CHAR,
 } AST_OprKind;
 
 typedef struct AST AST;
@@ -64,7 +66,15 @@ typedef struct AST AST;
 typedef struct {
 	AST_OprKind kind;
 	unsigned val;
-	AST *ptr, *idx;
+	union {
+		struct {
+			AST *ptr;
+			AST *idx;
+		} arr;
+		struct {
+			AST *reg;
+		} chr;
+	} as;
 } AST_Opr;
 
 struct AST {
@@ -145,6 +155,9 @@ struct AST {
 			AST *arr;
 			AST *as;
 		} map;
+		struct {
+			AST *reg;
+		} bcd;
 		AST_Opr opr;
 		AST *prog;
 		AST *block;
@@ -201,8 +214,8 @@ AST *ast_copy(AST *n) {
 	case AST_OPR:
 		copy->as.opr.kind = n->as.opr.kind;
 		copy->as.opr.val = n->as.opr.val;
-		copy->as.opr.ptr = ast_copy(n->as.opr.ptr);
-		copy->as.opr.idx = ast_copy(n->as.opr.idx);
+		copy->as.opr.as.arr.ptr = ast_copy(n->as.opr.as.arr.ptr);
+		copy->as.opr.as.arr.idx = ast_copy(n->as.opr.as.arr.idx);
 		break;
 
 	case AST_IF:
@@ -275,6 +288,21 @@ AST *ast_copy(AST *n) {
 	case AST_MCALL:
 		copy->as.mcall.id = ast_copy(n->as.mcall.id);
 		copy->as.mcall.args = ast_copy(n->as.mcall.args);
+		break;
+
+	case AST_MAP:
+		copy->as.map.reg = ast_copy(n->as.map.reg);
+		copy->as.map.arr = ast_copy(n->as.map.arr);
+		copy->as.map.as = ast_copy(n->as.map.as);
+		break;
+
+	case AST_WITH:
+		copy->as.with.maps = ast_copy(n->as.with.maps);
+		copy->as.with.block = ast_copy(n->as.with.block);
+		break;
+
+	case AST_BCD:
+		copy->as.bcd.reg = ast_copy(n->as.bcd.reg);
 		break;
 
 	case AST_RETURN:
@@ -394,6 +422,22 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 		fprintf(f, "}\n");
 		break;
 
+	case AST_WITH:
+		fintend(f, it, dp);
+		fprintf(f, "with {\n");
+		for (AST *c = n->as.with.maps; c; c = c->next) {
+			fintend(f, it, dp + 1);
+			ast_dump(f, c->as.map.reg, it, dp);
+			fprintf(f, " <-> ");
+			ast_dump(f, c->as.map.arr, it, dp);
+			if (c->as.map.as) {
+				fprintf(f, " as ");
+				ast_dump(f, c->as.map.as, it, dp);
+			}
+			fprintf(f, "\n");
+		}
+		break;
+
 	case AST_WHILE:
 		fintend(f, it, dp);
 		fprintf(f, "while ");
@@ -489,10 +533,14 @@ void ast_dump(FILE *f, AST *n, int it, int dp) {
 			case OPR_DT:   fprintf(f, "dt");       break;
 			case OPR_ST:   fprintf(f, "st");       break;
 			case OPR_MEM:  fprintf(f, "[i]");      break;
+			case OPR_CHAR: {
+				fprintf(f, "char ");
+				ast_dump(f, n->as.opr.as.chr.reg, it, dp+1);
+			} break;
 			case OPR_ARR: {
-				ast_dump(f, n->as.opr.ptr, it, dp+1);
+				ast_dump(f, n->as.opr.as.arr.ptr, it, dp+1);
 				fprintf(f, "[");
-				ast_dump(f, n->as.opr.idx, it, dp+1);
+				ast_dump(f, n->as.opr.as.arr.idx, it, dp+1);
 				fprintf(f, "]");
 			} break;
 		}

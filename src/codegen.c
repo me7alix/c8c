@@ -96,7 +96,7 @@ void patch_jump_address(CodegenCtx *ctx, size_t place, uint16_t addr) {
 void emit_ld(CodegenCtx *ctx, AST *dst, AST *src);
 
 void emit_arr(CodegenCtx *ctx, AST_Opr o, Location loc) {
-	Data *dt = get_data(ctx, o.ptr->as.id);
+	Data *dt = get_data(ctx, o.as.arr.ptr->as.id);
 	if (!dt) throw_error(loc, "no such data");
 
 	AST addr = {
@@ -107,7 +107,7 @@ void emit_arr(CodegenCtx *ctx, AST_Opr o, Location loc) {
 
 	emit_ld(ctx, &ir, &addr);
 
-	AST_Opr oi = o.idx->as.opr;
+	AST_Opr oi = o.as.arr.idx->as.opr;
 	switch (oi.kind) {
 	case OPR_VREG:
 		/* Fx1E - ADD I, Vx */
@@ -171,6 +171,21 @@ void emit_ld(CodegenCtx *ctx, AST *dst, AST *src) {
 		emit_arr(ctx, od, dst->loc);
 		emit_word(ctx, 0x6000 | (os.val & 0xFF));
 		emit_word(ctx, 0xF055);
+	} else if (od.kind == OPR_IREG && os.kind == OPR_CHAR) {
+		/* Fx33 - LD B, Vx */
+		AST_Opr reg = os.as.chr.reg->as.opr;
+		switch (reg.kind) {
+		case OPR_VREG:
+			emit_word(ctx, 0xF033 | ((reg.val & 0xF) << 8));
+			break;
+		case OPR_ARR:
+			emit_arr(ctx, reg, dst->loc);
+			emit_word(ctx, 0xF065);
+			emit_word(ctx, 0xF029);
+			break;
+		default:
+			throw_error(dst->loc, "V register expected");
+		}
 	} else {
 		throw_error(dst->loc, "operation is not supported");
 	}
@@ -364,9 +379,9 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			}
 
 			if (c->as.math.lhs->kind != AST_OPR) {
-				throw_error(c->as.math.lhs->loc, "not an operand");
+				throw_error(c->as.math.lhs->loc, "operand expected");
 			} else if (c->as.math.rhs->kind != AST_OPR) {
-				throw_error(c->as.math.rhs->loc, "not an operand");
+				throw_error(c->as.math.rhs->loc, "operand expected");
 			}
 
 			AST_Opr lhs = c->as.math.lhs->as.opr;
@@ -444,6 +459,9 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			} else if (lhs.kind == OPR_IREG && rhs.kind == OPR_VREG) {
 				/* Fx1E - ADD I, Vx */
 				emit_word(ctx, 0xF01E | ((rhs.val & 0xF) << 8));
+			} else if (lhs.kind == OPR_IREG && rhs.kind == OPR_IMM) {
+				emit_word(ctx, 0x6F00 | (rhs.val & 0xFF));
+				emit_word(ctx, 0xFF1E);
 			} else {
 				throw_error(c->loc, "unsupported operation");
 			}
@@ -520,15 +538,15 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			AST *and = c->as.rand.and;
 
 			if (reg->kind != AST_OPR) {
-				throw_error(c->as.math.lhs->loc, "not an operand");
+				throw_error(reg->loc, "operand expected");
 			} else if (and->kind != AST_OPR) {
-				throw_error(c->as.math.rhs->loc, "not an operand");
+				throw_error(and->loc, "operand expected");
 			}
 
 			if (reg->as.opr.kind != OPR_VREG) {
-				throw_error(c->as.math.lhs->loc, "not a V register");
+				throw_error(reg->loc, "V register expected");
 			} else if (and->as.opr.kind != OPR_IMM) {
-				throw_error(c->as.math.rhs->loc, "not an immediate value");
+				throw_error(and->loc, "immediate value expected");
 			}
 
 			/* Cxkk - RND Vx, byte */
@@ -553,6 +571,19 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 		case AST_MACRO:
 		case AST_ALIAS:
 			break;
+
+		case AST_BCD: {
+			AST *reg = c->as.bcd.reg;
+
+			if (reg->kind != AST_OPR)
+				throw_error(reg->loc, "operand expected");
+
+			if (reg->as.opr.kind != OPR_VREG)
+				throw_error(reg->loc, "V register expected");
+
+			/* Fx33 - LD B, Vx */
+			emit_word(ctx, 0xF033 | ((reg->as.opr.val & 0xF) << 8));
+		} break;
 
 		default:
 			assert(0);
