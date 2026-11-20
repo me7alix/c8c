@@ -1,3 +1,5 @@
+% Required emulator refresh rate: 60,000 Hz. %
+
 % Sprites are stored as arrays of bytes.
   Each byte represents one row of 8 pixels. %
 bytes smile = [
@@ -14,22 +16,22 @@ bytes bullet = [
 	0b11000000
 ]
 
-alias blt_max = 8
-bytes blt_x = arrayOf(blt_max)
-bytes blt_y = arrayOf(blt_max)
-bytes blt_dx = arrayOf(blt_max)
-bytes blt_dy = arrayOf(blt_max)
+alias blt_max = 16
+bytes blt_x   = arrayOf(blt_max)
+bytes blt_y   = arrayOf(blt_max)
+bytes blt_dx  = arrayOf(blt_max)
+bytes blt_dy  = arrayOf(blt_max)
 alias blt_cnt = vd
 
-alias x = v7
-alias y = v8
+alias pl_x = v7
+alias pl_y = v8
+alias cnt = va
+alias sec = vc
+alias scr = vb
+
+bytes digits = arrayOf(3)
 
 % Macros are defined like this. %
-macro wait(t) {
-	dt = t
-	while dt != 0 {}
-}
-
 macro movement(x, y) {
 	if kd == 0x8 { y += 1 }
 	if kd == 0x5 { y -= 1 }
@@ -58,9 +60,30 @@ proc blt_new {
 	bc += 1
 }
 
+proc print_score {
+	i = digits
+	bcd scr
+
+	v1 = 1
+	v2 = 1
+	i = char digits[0]
+	drawi v1, v2, 5
+
+	v1 += 5
+	i = char digits[1]
+	drawi v1, v2, 5
+
+	v1 += 5
+	i = char digits[2]
+	drawi v1, v2, 5
+}
+
 proc start_new_game {
-	x = 0
-	y = 24
+	pl_x = 0
+	pl_y = 24
+	cnt = 0
+	sec = 0
+	scr = 0
 	blt_cnt = 0
 	call blt_new
 	call blt_new
@@ -71,14 +94,10 @@ proc start_new_game {
 proc main {
 	call start_new_game
 
-	alias cnt = va
-	alias sec = vc
-
-	cnt = 0
-	sec = 0
-
 	loop {
-		movement(x, y)
+		dt = 3
+
+		movement(pl_x, pl_y)
 
 		ve = 0
 		while ve < blt_cnt {
@@ -112,14 +131,17 @@ proc main {
 			ve += 1
 		}
 
-		draw smile, x, y
-
+		draw smile, pl_x, pl_y
 		if vf != 0 {
-			call start_new_game
+			blt_cnt = 0
+			dt = 85
 		}
 
-		if cnt >= 30 {
+		call print_score
+
+		if cnt >= 20 {
 			sec += 1
+			scr += 1
 			cnt = 0
 		}
 
@@ -129,5 +151,11 @@ proc main {
 		}
 
 		cnt += 1
+
+		if blt_cnt == 0 {
+			call start_new_game
+		}
+
+		while dt != 0 {}
 	}
 }
