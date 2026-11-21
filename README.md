@@ -12,7 +12,7 @@ The syntax is C-like because why not. The `main` procedure is the entry point an
 
 Example (fibonacci.c8):
 
-```asm
+```zig
 alias len = 32
 bytes arr = arrayOf(len)
 
@@ -48,7 +48,7 @@ Many language constructs have side effects on the `v0` and `vf` registers, so I 
 
 The `with` statement helps you map array values to registers (or variables) and write back changes automatically.
 
-```
+```zig
 with {
     v1 <-> blt_x [ve] as x
     v2 <-> blt_y [ve] as y
