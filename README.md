@@ -12,7 +12,7 @@ The syntax is C-like because why not. The `main` procedure is the entry point an
 
 Example (fibonacci.c8):
 
-```
+```asm
 alias len = 32
 bytes arr = arrayOf(len)
 
