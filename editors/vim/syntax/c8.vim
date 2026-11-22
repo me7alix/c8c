@@ -6,7 +6,7 @@ syntax region c8Comment start=/%/ end=/%/
     \ contains=@Spell
 
 " Keywords
-syntax keyword c8Keyword proc bytes words alias arrayOf macro rand with as bcd char
+syntax keyword c8Keyword return proc byte bytes words alias arrayOf macro rand with as bcd char
 syntax keyword c8Conditional if elif else
 syntax keyword c8Repeat while loop
 syntax keyword c8Statement call cls draw drawi
@@ -22,7 +22,7 @@ syntax match c8Number /\<\d\+\>/
 
 " Operators
 syntax match c8Operator /==\|!=\|+=\|-=\|>=\|<=/
-syntax match c8Operator /[=+*\/<>-]/
+syntax match c8Operator /[=+*\/<>-\&\|\[\]]/
 
 " Procedure declarations
 syntax match c8ProcName /\<proc\s\+\zs[a-zA-Z_][a-zA-Z0-9_]*/
