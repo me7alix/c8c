@@ -44,6 +44,24 @@ Many language constructs have side effects on the `v0` and `vf` registers, so I 
 * Array access always uses the `v0` register.
 * Array access with an immediate index value also uses the `v0` register.
 
+### Global variables
+
+Global variables are declared at the top level of the file, outside of any proc. Two types are available:
+
+```zig
+% A signle byte variable. %
+byte a = 0
+
+% An array of bytes. %
+bytes b = [0, 1, 2]
+
+proc main {
+    % Accessing globals. %
+    [a] += 6
+    b[3] = 9
+}
+```
+
 ### `with` statement
 
 The `with` statement helps you map array values to registers (or variables) and write back changes automatically.
