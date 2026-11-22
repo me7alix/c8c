@@ -116,11 +116,12 @@ void emit_arr(CodegenCtx *ctx, AST_Opr o, Location loc) {
 		emit_word(ctx, 0xF01E | ((oi.val & 0xF) << 8));
 		break;
 	case OPR_IMM:
-		emit_word(ctx, 0x6F00 | (oi.val & 0xFF));
+		if (oi.val > 0)
+			emit_word(ctx, 0x6F00 | (oi.val & 0xFF));
 		emit_word(ctx, 0xFF1E);
 		break;
 	default:
-		throw_error(loc, "operation is not supported");
+		throw_error(loc, "unsupported operation");
 	}
 }
 
@@ -392,32 +393,6 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 
 			if (c->as.math.op == MOP_ASG) {
 				emit_ld(ctx, c->as.math.lhs, c->as.math.rhs);
-			} else if ((lhs.kind == OPR_VREG || arr) && rhs.kind == OPR_VREG) {
-				if (arr) {
-					emit_arr(ctx, lhs, c->as.math.lhs->loc);
-					emit_word(ctx, 0xF065);
-					lhs = ov0;
-				}
-
-				inst = 0x8000;
-				inst |= (lhs.val & 0xF) << 8;
-				inst |= (rhs.val & 0xF) << 4;
-
-				switch (c->as.math.op) {
-					case MOP_ADD: inst |= 0x4; break;
-					case MOP_SUB: inst |= 0x5; break;
-					case MOP_AND: inst |= 0x2; break;
-					case MOP_OR:  inst |= 0x1; break;
-					case MOP_XOR: inst |= 0x3; break;
-					default: throw_error(c->loc, "operation is not supported");
-				}
-
-				emit_word(ctx, inst);
-
-				if (arr) {
-					emit_arr(ctx, slhs, c->as.math.lhs->loc);
-					emit_word(ctx, 0xF055);
-				}
 			} else if (
 				(lhs.kind == OPR_VREG || arr) &&
 				rhs.kind == OPR_IMM &&
@@ -451,6 +426,39 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 
 				emit_ld(ctx, &vf, c->as.math.rhs);
 				emit_word(ctx, 0x80F5 | ((lhs.val & 0xF) << 8));
+
+				if (arr) {
+					emit_arr(ctx, slhs, c->as.math.lhs->loc);
+					emit_word(ctx, 0xF055);
+				}
+			} else if (
+				(lhs.kind == OPR_VREG || arr) &&
+				(rhs.kind == OPR_VREG || rhs.kind == OPR_IMM)
+			) {
+				if (arr) {
+					emit_arr(ctx, lhs, c->as.math.lhs->loc);
+					emit_word(ctx, 0xF065);
+					lhs = ov0;
+				}
+
+				inst = 0x8000;
+				inst |= (lhs.val & 0xF) << 8;
+				if (rhs.kind == OPR_VREG) {
+					inst |= (rhs.val & 0xF) << 4;
+				} else {
+					emit_word(ctx, 0x6000 | (rhs.val & 0xFF));
+				}
+
+				switch (c->as.math.op) {
+					case MOP_ADD: inst |= 0x4; break;
+					case MOP_SUB: inst |= 0x5; break;
+					case MOP_AND: inst |= 0x2; break;
+					case MOP_OR:  inst |= 0x1; break;
+					case MOP_XOR: inst |= 0x3; break;
+					default: throw_error(c->loc, "unsupported operation");
+				}
+
+				emit_word(ctx, inst);
 
 				if (arr) {
 					emit_arr(ctx, slhs, c->as.math.lhs->loc);
