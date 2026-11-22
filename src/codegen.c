@@ -98,29 +98,29 @@ void emit_ld(CodegenCtx *ctx, AST *dst, AST *src);
 void emit_arr(CodegenCtx *ctx, AST_Opr o, Location loc) {
 	Data *dt = get_data(ctx, o.as.arr.ptr->as.id);
 	if (!dt) throw_error(loc, "no such data");
+	AST_Opr oi = o.as.arr.idx->as.opr;
+
+	uint16_t caddr = dt->addr;
+	if (oi.kind == OPR_IMM) {
+		caddr += (oi.val & 0xFF);
+	}
 
 	AST addr = {
 		.kind = AST_OPR,
 		.as.opr.kind = OPR_IMM,
-		.as.opr.val = dt->addr,
+		.as.opr.val = caddr,
 	};
 
 	emit_ld(ctx, &ir, &addr);
 
-	AST_Opr oi = o.as.arr.idx->as.opr;
-	switch (oi.kind) {
-	case OPR_VREG:
+	if (oi.kind == OPR_VREG) {
 		/* Fx1E - ADD I, Vx */
 		if (oi.val == 0)
 			throw_error(loc, "v0 cannot be array index");
 		emit_word(ctx, 0xF01E | ((oi.val & 0xF) << 8));
-		break;
-	case OPR_IMM:
-		if (oi.val > 0)
-			emit_word(ctx, 0x6F00 | (oi.val & 0xFF));
-		emit_word(ctx, 0xFF1E);
-		break;
-	default:
+	} else if (oi.kind == OPR_IMM) {
+		/* Do nothing */
+	} else {
 		throw_error(loc, "unsupported operation");
 	}
 }
