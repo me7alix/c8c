@@ -44,10 +44,10 @@ proc blt_new {
 	alias bc = blt_cnt
 
 	rand v0, 63
-	blt_x[blt_cnt] = v0
+	blt_x[bc] = v0
 
 	rand v0, 15
-	blt_y[blt_cnt] = v0
+	blt_y[bc] = v0
 
 	rand v0, 1
 	if v0 == 0 { blt_dx[bc] = 0 }
