@@ -1,0 +1,25 @@
+include "print.c8"
+
+proc main {
+    alias a = va
+    alias b = vb
+    alias l = vc
+
+    a = 0
+    b = 1
+
+    loop {
+        l = b
+        b += a
+        a = l
+
+		v0 = a
+		v1 = 24
+		v2 = 12
+		cls
+		call print
+
+		dt = 30
+		while dt != 0 {}
+    }
+}
