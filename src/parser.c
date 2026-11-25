@@ -153,6 +153,40 @@ SPC_Parser *pnum() {
 	return p;
 }
 
+SPC_Result pstrf(SPC_Parser *p, SPC_Input *inp) {
+	Scanner *s = inp->self;
+	skip_ws(s);
+
+	if (peek(s) != '"') {
+		return spc_fail("not a string", NULL);
+	} else {
+		next(s);
+	}
+
+	char str[2048] = {0};
+	size_t count = 0;
+
+	while (peek(s) != '"' && peek(s) != '\0') {
+		if (count >= sizeof str)
+			throw_error(get_loc(s), "string is too long");
+		str[count++] = next(s);
+	}
+
+	if (peek(s) == '\0') {
+		return spc_fatal("not finished string", NULL);
+	}
+
+	next(s);
+
+	return spc_ok(my_strdup(str), free);
+}
+
+SPC_Parser *pstr() {
+	SPC_Parser *p = malloc(sizeof(*p));
+	p->parse = pstrf;
+	return p;
+}
+
 SPC_Result pregf(SPC_Parser *p, SPC_Input *inp) {
 	Scanner *l = inp->self;
 	skip_ws(l);
@@ -247,6 +281,13 @@ SPC_Result fold_proc(int _, void **args) {
 	n->loc = ((AST*)args[0])->loc;
 	n->as.proc.id = ((AST*)args[1])->as.id;
 	n->as.proc.block = args[2];
+	return spc_ok(n, free);
+}
+
+SPC_Result fold_include(int _, void **args) {
+	AST *n = ast_new(AST_INCLUDE);
+	n->loc = ((AST*)args[0])->loc;
+	n->as.include.path = args[1];
 	return spc_ok(n, free);
 }
 
@@ -607,13 +648,14 @@ SPC_Parser *parser() {
 	SPC_Parser *stmt  = spc_choice(16, spc_try(mcall), bcd, with, macro, alias, ifc, cls, rands, drawi, draw, loop, whs, ret, ifs, call, math);
 
 	           *block = spc_between(pch('{'), spc_map(map_block, spc_many(fold_items, stmt)), pch('}'));
+	SPC_Parser *incl  = spc_sequence(fold_include, 2, pid("include"), pstr());
 	SPC_Parser *proc  = spc_sequence(fold_proc, 3, pid("proc"), pid(NULL), *block);
 	SPC_Parser *array = spc_between(pch('['), spc_sep_by(fold_items, pnum(), pch(',')), pch(']'));
 	SPC_Parser *arrof = spc_sequence(fold_array_of, 2, pid("arrayOf"), spc_between(pch('('), *opr, pch(')')));
 	SPC_Parser *byte  = spc_sequence(fold_byte, 2, spc_between(pid("byte"), pid(NULL), pch('=')), *opr);
 	SPC_Parser *bytes = spc_sequence(fold_bytes, 2, spc_between(pid("bytes"), pid(NULL), pch('=')), spc_choice(2, array, arrof));
 	/* SPC_Parser *words = spc_sequence(fold_bytes, 2, spc_between(pid("words"), pid(NULL), pch('=')), array); */
-	SPC_Parser *hld   = spc_choice(5, macro, alias, proc, byte, bytes);
+	SPC_Parser *hld   = spc_choice(6, incl, macro, alias, proc, byte, bytes);
 	return              spc_map(map_prog, spc_keep_left(spc_many(fold_items, hld), pch('\0')));
 
 }

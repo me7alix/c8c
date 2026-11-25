@@ -79,6 +79,11 @@ int main(int argc, char *argv[]) {
 	SPC_Parser *pp = parser();
 
 	Scanner *sc = sc_from_file(input);
+	if (!sc) {
+		fprintf(stderr, "error reading the file");
+		return 1;
+	}
+
 	SPC_Input inp = {sc, sc_mark, sc_unmark, sc_rewind};
 
 	SPC_Result res = pp->parse(pp, &inp);

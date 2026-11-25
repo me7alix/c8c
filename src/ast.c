@@ -29,6 +29,7 @@ typedef enum {
 	AST_WITH,
 	AST_MAP,
 	AST_BCD,
+	AST_INCLUDE,
 } AST_Kind;
 
 typedef enum {
@@ -158,6 +159,9 @@ struct AST {
 		struct {
 			AST *reg;
 		} bcd;
+		struct {
+			char *path;
+		} include;
 		AST_Opr opr;
 		AST *prog;
 		AST *block;
@@ -175,6 +179,14 @@ char *my_strdup(char *src) {
 	size_t len = strlen(src) + 1;
 	char *n = malloc(len);
 	memcpy(n, src, len);
+	return n;
+}
+
+char *my_strndup(char *src, size_t size) {
+	size_t len = size + 1;
+	char *n = malloc(len);
+	memcpy(n, src, len);
+	n[len - 1] = '\0';
 	return n;
 }
 

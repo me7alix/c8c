@@ -576,6 +576,7 @@ void emit_block(CodegenCtx *ctx, AST *n) {
 			}
 		} break;
 
+		case AST_INCLUDE:
 		case AST_MACRO:
 		case AST_ALIAS:
 			break;

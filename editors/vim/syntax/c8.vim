@@ -6,10 +6,13 @@ syntax region c8Comment start=/%/ end=/%/
     \ contains=@Spell
 
 " Keywords
-syntax keyword c8Keyword return proc byte bytes words alias arrayOf macro rand with as bcd char
+syntax keyword c8Keyword include return proc byte bytes words alias arrayOf macro rand with as bcd char
 syntax keyword c8Conditional if elif else
 syntax keyword c8Repeat while loop
 syntax keyword c8Statement call cls draw drawi
+
+" Include string
+syntax match c8IncludeFile /"\([^"]*\.c8\)"/
 
 " Registers
 syntax match c8Register /\<v[0-8]\>/
@@ -47,6 +50,7 @@ highlight default link c8ProcName Function
 highlight default link c8AliasName Identifier
 highlight default link c8Identifier Identifier
 highlight default link c8Hex Number
+highlight default link c8IncludeFile String
 
 syntax sync fromstart
 let b:current_syntax = "c8"

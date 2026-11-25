@@ -100,6 +100,30 @@ void append_macro(TransformCtx *ctx, AST *n) {
 	da_append(&ctx->macros.items[last], macro);
 }
 
+void ast_insert(AST *prev, AST *n) {
+	AST *next = prev->next;
+	prev->next = n;
+	n->next = next;
+}
+
+char *get_folder(char *file) {
+	char *dir = my_strdup(file);
+	size_t len = strlen(file);
+
+	for (int i = len - 1; i >= 0; i--) {
+		if (dir[i] == '/') {
+			dir[i + 1] = '\0';
+			break;
+		}
+
+		if (i == 0) {
+			return NULL;
+		}
+	}
+
+	return dir;
+}
+
 void transform_ast(TransformCtx *ctx, AST *n) {
 	switch (n->kind) {
 	case AST_PROC:
@@ -250,6 +274,39 @@ void transform_ast(TransformCtx *ctx, AST *n) {
 		transform_ast(ctx, n->as.drawi.y);
 		transform_ast(ctx, n->as.drawi.n);
 		break;
+
+	case AST_INCLUDE: {
+		char *folder = get_folder(n->loc.file);
+		if (!folder) throw_error(n->loc, "invalid file path");
+
+		SPC_Parser *p = parser();
+
+		char path[4096];
+		sprintf(path, "%s%s", folder, n->as.include.path);
+
+		Scanner *sc = sc_from_file(path);
+		if (!sc) throw_error(n->loc, "file not found");
+
+		SPC_Input inp = {sc, sc_mark, sc_unmark, sc_rewind};
+
+		SPC_Result res = p->parse(p, &inp);
+		if (res.status != SPC_OK) {
+			Error *err = res.data;
+			throw_error(err->loc, err->message);
+		}
+
+		AST *prog = res.data;
+		AST *list = prog->as.prog;
+		if (list) {
+			AST *last;
+			for (AST *c = list; c; c = c->next) {
+				transform_ast(ctx, c);
+				if (!c->next) last = c;
+			}
+			last->next = n->next;
+			*n = *list;
+	 	}
+	} break;
 
 	default:;
 	}
